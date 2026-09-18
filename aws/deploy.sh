@@ -3,6 +3,7 @@
 #
 #   ./aws/deploy.sh                          # site + scheduled feed (no LLM cost)
 #   ./aws/deploy.sh --key sk-ant-...         # also deploy the Analyst endpoint
+#   ./aws/deploy.sh --domain nq.example.com  # custom hostname on Route 53
 #   ./aws/deploy.sh --schedule "cron(0/30 * ? * MON-FRI *)"
 #
 # Re-run it any time: it updates the stack, the Lambda code and the page.
@@ -15,6 +16,9 @@ SCHEDULE="cron(0/10 * ? * MON-FRI *)"
 MODEL="claude-haiku-4-5"
 MAX_TOKENS="900"
 KEY=""
+DOMAIN=""
+ZONE_ID=""
+CERT_ARN=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -22,6 +26,9 @@ while [ $# -gt 0 ]; do
     --region)    REGION="$2"; shift 2 ;;
     --schedule)  SCHEDULE="$2"; shift 2 ;;
     --key)       KEY="$2"; shift 2 ;;
+    --domain)    DOMAIN="$2"; shift 2 ;;
+    --zone-id)   ZONE_ID="$2"; shift 2 ;;
+    --cert)      CERT_ARN="$2"; shift 2 ;;
     --model)     MODEL="$2"; shift 2 ;;
     --max-tokens) MAX_TOKENS="$2"; shift 2 ;;
     -h|--help)   sed -n '2,10p' "$0"; exit 0 ;;
@@ -32,6 +39,62 @@ done
 command -v aws  >/dev/null || { echo "aws CLI not found: https://aws.amazon.com/cli/" >&2; exit 1; }
 command -v zip  >/dev/null || { echo "zip not found (apt install zip / brew install zip)" >&2; exit 1; }
 aws sts get-caller-identity --region "$REGION" >/dev/null || { echo "AWS credentials not configured. Run: aws configure" >&2; exit 1; }
+
+# ---------------------------------------------------------------- custom domain
+# Find the Route 53 zone and an ACM certificate that already cover the hostname.
+# CloudFront only accepts certificates from us-east-1, whatever region the rest
+# of the stack lives in, so every ACM call below pins that region explicitly.
+if [ -n "$DOMAIN" ]; then
+  if [ -z "$ZONE_ID" ]; then
+    best_len=0
+    while read -r zid zname; do
+      [ -z "${zname:-}" ] && continue
+      zname="${zname%.}"
+      if [ "$DOMAIN" = "$zname" ] || [ "${DOMAIN%".$zname"}" != "$DOMAIN" ]; then
+        if [ ${#zname} -gt $best_len ]; then ZONE_ID="$zid"; best_len=${#zname}; fi
+      fi
+    done < <(aws route53 list-hosted-zones \
+               --query 'HostedZones[?Config.PrivateZone==`false`].[Id,Name]' \
+               --output text | sed 's#/hostedzone/##')
+    [ -n "$ZONE_ID" ] || { echo "No public Route 53 zone covers $DOMAIN. Pass --zone-id." >&2; exit 1; }
+    echo "==> hosted zone: $ZONE_ID"
+  fi
+
+  if [ -z "$CERT_ARN" ]; then
+    for arn in $(aws acm list-certificates --region us-east-1 \
+                   --certificate-statuses ISSUED \
+                   --query 'CertificateSummaryList[].CertificateArn' --output text); do
+      for n in $(aws acm describe-certificate --region us-east-1 --certificate-arn "$arn" \
+                   --query 'Certificate.SubjectAlternativeNames' --output text); do
+        if [ "$n" = "$DOMAIN" ]; then CERT_ARN="$arn"; break 2; fi
+        case "$n" in
+          \*.*) suffix="${n#\*.}"
+                # a wildcard covers exactly one extra label, not a deeper subdomain
+                if [ "${DOMAIN%".$suffix"}" != "$DOMAIN" ] &&
+                   [ "${DOMAIN%".$suffix"}" = "${DOMAIN%%.*}" ]; then CERT_ARN="$arn"; break 2; fi ;;
+        esac
+      done
+    done
+  fi
+  if [ -z "$CERT_ARN" ]; then
+    cat >&2 <<MSG
+No issued us-east-1 certificate covers $DOMAIN.
+
+Request one (DNS validation, free), add the CNAME it prints to zone $ZONE_ID,
+wait for it to be issued, then re-run this script:
+
+  aws acm request-certificate --region us-east-1 --domain-name $DOMAIN \\
+      --validation-method DNS --query CertificateArn --output text
+  aws acm describe-certificate --region us-east-1 --certificate-arn <arn> \\
+      --query 'Certificate.DomainValidationOptions[0].ResourceRecord'
+  aws acm wait certificate-validated --region us-east-1 --certificate-arn <arn>
+
+Or pass an existing one with --cert <arn>.
+MSG
+    exit 1
+  fi
+  echo "==> certificate: $CERT_ARN"
+fi
 
 # The analyst endpoint is public, so it carries a shared token. Keep the same
 # one across redeploys; CloudFormation cannot read a NoEcho parameter back.
@@ -46,6 +109,9 @@ fi
 # Only pass the analyst parameters when there is a key. Empty-string values are
 # awkward for `cloudformation deploy`, and the template already defaults them.
 PARAMS=(ProjectName="$PROJECT" FeedSchedule="$SCHEDULE")
+if [ -n "$DOMAIN" ]; then
+  PARAMS+=(DomainName="$DOMAIN" HostedZoneId="$ZONE_ID" CertificateArn="$CERT_ARN")
+fi
 if [ -n "$KEY" ]; then
   PARAMS+=(AnthropicApiKey="$KEY" AnalystModel="$MODEL" \
            AnalystMaxTokens="$MAX_TOKENS" AnalystSharedToken="$TOKEN")
@@ -116,6 +182,7 @@ echo
 echo "  $SITE"
 echo
 echo "  CloudFront takes a few minutes to go live the first time."
+[ -n "$DOMAIN" ] && echo "  Also reachable at $(out CloudFrontDomain) while DNS settles."
 [ -n "$KEY" ] && echo "  Analyst: $(out AnalystEndpoint)  (model $MODEL, capped at $MAX_TOKENS tokens)"
 echo "  Feeds refresh on: $SCHEDULE (UTC)"
 echo "  Tear it all down with: ./aws/destroy.sh --project $PROJECT --region $REGION"

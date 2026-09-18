@@ -145,8 +145,9 @@ still well under a dollar.
 
 Two things would change that, and neither is on by default:
 
-- **A custom domain.** A Route 53 hosted zone is $0.50/month. The CloudFront
-  domain the deploy prints is free, so skip this unless you want a pretty URL.
+- **A custom domain.** Free if you already host the zone in Route 53 — the
+  alias records and an ACM certificate both cost nothing. Only a *new* hosted
+  zone costs anything, at $0.50/month. See below.
 - **The Analyst.** Only deployed if you pass `--key`. It defaults to
   `claude-haiku-4-5` ($1.00 / $5.00 per million input / output tokens) with
   output capped at 900 tokens. A question sends roughly 2–3k tokens of console
@@ -162,6 +163,7 @@ cheapest shape that actually does the job.
 ### Options
 
 ```bash
+./aws/deploy.sh --domain nq.example.com                  # custom hostname
 ./aws/deploy.sh --region eu-west-1                       # anywhere you like
 ./aws/deploy.sh --schedule "cron(0/30 13-21 ? * MON-FRI *)"  # US session only, half-hourly
 ./aws/deploy.sh --model claude-sonnet-5 --max-tokens 1200    # a sharper analyst
@@ -171,6 +173,29 @@ cheapest shape that actually does the job.
 Cheaper still: a wider schedule interval is the only dial that matters, and even
 every 10 minutes is free. Pick the cadence you actually want, not the one you
 think you can afford.
+
+### A custom domain
+
+```bash
+./aws/deploy.sh --domain nq.example.com
+```
+
+That is the whole thing. The script finds the Route 53 hosted zone that covers
+the hostname (longest matching suffix, so `staging.example.com` wins over
+`example.com` where both exist) and an issued ACM certificate that covers it,
+including via a wildcard. It then adds the hostname as a CloudFront alias and
+creates A and AAAA alias records pointing at the distribution.
+
+Certificates must live in **us-east-1** — CloudFront accepts them from no other
+region, whatever region the rest of the stack is in. The script pins that region
+for its certificate lookups regardless of `--region`.
+
+If no certificate covers the hostname, the script stops and prints the three
+commands to request and validate a free one, rather than guessing. Override
+either lookup with `--zone-id` or `--cert <arn>`.
+
+The CloudFront domain keeps working alongside the custom one, and the deploy
+prints both — useful in the minutes before DNS settles.
 
 ### Security notes
 
