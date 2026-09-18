@@ -74,13 +74,7 @@ jobs:
       - name: Package and ship the feed function
         run: |
           set -euo pipefail
-          mkdir -p build/feed
-          cp aws/lambda/feed/index.mjs feed/core.mjs feed/sources.mjs build/feed/
-          # npm walks UP for a package.json, and this repo has one at its root -
-          # without a manifest here it installs into the repo root instead and the
-          # zip ships without node_modules. Give the build dir its own.
-          echo '{"name":"nq-feed","private":true,"type":"module"}' > build/feed/package.json
-          ( cd build/feed && npm install --silent --no-audit --no-fund --omit=dev @aws-sdk/client-s3 )
+          aws/package-feed.sh build/feed
           test -d build/feed/node_modules/@aws-sdk/client-s3 \
             || { echo "vendoring failed - node_modules missing"; exit 1; }
           ( cd build/feed && zip -qr ../feed.zip . )
