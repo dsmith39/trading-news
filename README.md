@@ -6,7 +6,9 @@ is no trade, and the job of a news tool is to tell you *which* hours are worth
 risking money in — not to manufacture a signal every five minutes.
 
 Run it as a published Artifact (a browser OS, nothing to install), and feed it
-real data with the fetcher in this repo.
+real data with the fetcher in this repo. It is one page with three shells — a
+windowed desktop, a two-pane tablet layout and a single-app phone layout — and
+it picks the right one at runtime.
 
 ---
 
@@ -22,6 +24,31 @@ real data with the fetcher in this repo.
 | **Journal** | Log the read you took and what it did. The stats compare the bias score on your winners against your losers — that is the number that tells you whether to raise or lower your threshold. |
 | **Brief** | Assembles everything the console knows into one prompt — factors, gates, tape, levels, wire, calendar, playbook, your risk parameters — and you paste it into Claude yourself. Pick an angle, toggle the sections, copy. No key, no cost, any model you like. |
 | **Settings** | Theme, macro regime, reference price, risk per trade, instrument (NQ or MNQ), engagement thresholds, and the snapshot loader. |
+
+---
+
+## One page, three shells
+
+The same `os/index.html` reshapes itself around the device it lands on. The
+layout engine writes `data-mode` and `data-orient` onto `<html>`, and both the
+stylesheet and the window manager read it from there — so the CSS and the JS can
+never disagree about which shell is running.
+
+| Shell | When | What you get |
+|---|---|---|
+| **Phone** | viewport ≤ 700px wide, or a touch device whose short side is ≤ 480px (a phone held sideways) | One full-bleed app at a time. Compact two-row header with the live ticker, a bottom tab bar for Signal / Wire / Catalysts / Tape, and a **More** sheet for Playbook, Journal, Brief and Settings. No title bars, no dragging — thumb-sized targets and 16px inputs so iOS does not zoom on focus. |
+| **Tablet** | up to 1180px wide, or a touch device whose short side is ≤ 1024px | Two tiled panes, each with its own tab strip. Pane **A** is the reference column (Signal by default), pane **B** the working column. The ⇄ button moves an app between panes. Landscape puts the apps in a left icon rail; portrait stacks the panes and keeps the dock at the bottom. |
+| **Desktop** | wider than 1180px with a fine pointer | The original free-floating window manager, unchanged — drag, resize, minimise, maximise, z-order. |
+
+Crossing a breakpoint rebuilds the shell around whatever is already open. The
+windows and their rendered state are reused, never thrown away, so rotating a
+tablet or dragging a desktop window narrow does not cost you your place. A
+window the shell is not currently showing is marked dirty instead of being
+redrawn on every two-second tick, and caught up the moment it comes back on
+screen.
+
+There is no user-agent sniffing and no second HTML file to keep in sync: one
+document, served from the same S3 object to every device, deciding at runtime.
 
 ---
 

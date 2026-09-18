@@ -1,3 +1,11 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#070A0F" media="(prefers-color-scheme:dark)">
+<meta name="theme-color" content="#DCE2EC" media="(prefers-color-scheme:light)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Decision-support console for Nasdaq-100 futures: news scoring, catalysts, session structure and sentiment.">
 <title>NQ Trading OS</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -10,6 +18,7 @@
   --surface:#121824;
   --surface-2:#19202E;
   --surface-3:#222B3C;
+  --track:#222B3C;
   --line:#2A3446;
   --line-soft:#1E2635;
   --ink:#E8ECF4;
@@ -38,6 +47,7 @@
   --surface:#FFFFFF;
   --surface-2:#F2F5FA;
   --surface-3:#E4E9F2;
+  --track:#C9D3E2;
   --line:#C6CFDD;
   --line-soft:#DCE3ED;
   --ink:#0E1420;
@@ -198,7 +208,7 @@ tr:last-child td{border-bottom:0}
 .verdict h2{margin:0;font-size:24px;font-stretch:118%;font-weight:800;letter-spacing:-.01em;line-height:1.08}
 .verdict .sub{font-size:11px;color:var(--ink-2);margin-top:3px}
 .scorebig{font-family:var(--mono);font-size:42px;font-weight:700;line-height:1;letter-spacing:-.03em}
-.meter{height:9px;border-radius:2px;background:var(--surface-3);position:relative;overflow:hidden;margin-top:7px}
+.meter{height:9px;border-radius:2px;background:var(--track);position:relative;overflow:hidden;margin-top:7px}
 .meter i{position:absolute;top:0;bottom:0;display:block}
 .meter .mid{left:50%;width:1px;background:var(--ink-3);opacity:.7;z-index:2}
 .fac{display:grid;grid-template-columns:1fr 132px 46px;gap:8px;align-items:center;padding:6px 0;
@@ -206,7 +216,7 @@ tr:last-child td{border-bottom:0}
 .fac:last-child{border-bottom:0}
 .fac .fn{font-size:11.5px}
 .fac .fn small{display:block;color:var(--ink-3);font-size:10px;line-height:1.35}
-.fbar{height:6px;background:var(--surface-3);border-radius:2px;position:relative}
+.fbar{height:6px;background:var(--track);border-radius:2px;position:relative}
 .fbar i{position:absolute;top:0;bottom:0;border-radius:2px}
 .fbar .c{position:absolute;top:-2px;bottom:-2px;left:50%;width:1px;background:var(--ink-3);opacity:.6}
 .fac .fv{font-family:var(--mono);font-size:12px;text-align:right;font-weight:500}
@@ -307,20 +317,214 @@ tr:last-child td{border-bottom:0}
   border-top:1px solid var(--line);padding-top:12px}
 #boot.done{opacity:0;pointer-events:none;transition:opacity .45s ease}
 
-/* ============================ PHONE ============================ */
-@media (max-width:760px){
-  :root{--dock:54px}
-  #menubar{gap:7px;padding:0 8px}
-  #ticker{gap:11px}
-  #sessionpill{display:none}
-  .win{position:absolute!important;inset:0!important;width:auto!important;height:auto!important;
-    border-radius:0;border-left:0;border-right:0;border-bottom:0;transform:none!important}
-  .win:not(.top){display:none}
-  .wbar{cursor:default}
-  .grip,.wbtn.max,.wbtn.min{display:none}
-  .dapp{width:54px}
-  .fac{grid-template-columns:1fr 78px 42px}
-  #wallmark{display:none}
+/* ============================ FORM GRIDS ============================
+   Named so the shell can restack them per device — an inline
+   grid-template-columns cannot be overridden by a media query.
+   ==================================================================== */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}
+/* the −/count/+ trio wraps as one unit rather than splitting across rows */
+.stepper{display:inline-flex;align-items:center;gap:5px}
+.briefout{min-height:260px;height:calc(100% - 132px);font-family:var(--mono);font-size:11px;line-height:1.5}
+
+/* =====================================================================
+   ADAPTIVE SHELL
+   The layout engine writes data-mode and data-orient onto <html>, so the
+   stylesheet and the window manager can never disagree about which world
+   they are in:
+     phone   — one app at a time, bottom tab bar, thumb-sized targets
+     tablet  — two tiled panes with tab strips, icon rail in landscape
+     desktop — the free-floating window manager, unchanged
+   ===================================================================== */
+
+/* -------------------------------- shared touch shell -------------------------------- */
+[data-mode="phone"],[data-mode="tablet"]{--r:4px;--rail:76px}
+[data-mode="phone"] body,[data-mode="tablet"] body{font-size:14px;-webkit-tap-highlight-color:transparent}
+[data-mode="phone"] #os,[data-mode="tablet"] #os{
+  display:grid;grid-template-columns:100%;grid-template-rows:auto minmax(0,1fr) auto;
+  grid-template-areas:"bar" "desk" "dock";
+  padding-bottom:0;
+  padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+[data-mode="phone"] #menubar,[data-mode="tablet"] #menubar{grid-area:bar}
+[data-mode="phone"] #desktop,[data-mode="tablet"] #desktop{grid-area:desk}
+[data-mode="phone"] #dock,[data-mode="tablet"] #dock{grid-area:dock}
+
+/* Windows shed their chrome — the shell navigates for them. */
+[data-mode="phone"] .wbar,[data-mode="tablet"] .wbar,
+[data-mode="phone"] .grip,[data-mode="tablet"] .grip{display:none}
+[data-mode="phone"] .win,[data-mode="tablet"] .win{
+  position:absolute!important;inset:0!important;width:auto!important;height:auto!important;
+  min-width:0;min-height:0;border:0;border-radius:0;box-shadow:none;transform:none!important;
+  background:var(--ground)}
+[data-mode="phone"] #grid,[data-mode="tablet"] #grid,
+[data-mode="phone"] #wallmark,[data-mode="tablet"] #wallmark{display:none}
+[data-mode="phone"] .wbody,[data-mode="tablet"] .wbody{overflow-wrap:break-word}
+[data-mode="phone"] .wbody img,[data-mode="tablet"] .wbody img{max-width:100%}
+
+/* 44px is the smallest target a thumb hits reliably. */
+[data-mode="phone"] button,[data-mode="tablet"] button,
+[data-mode="phone"] select,[data-mode="tablet"] select{touch-action:manipulation}
+[data-mode="phone"] .btn,[data-mode="tablet"] .btn{padding:9px 14px;font-size:12.5px;min-height:38px}
+[data-mode="phone"] .filters,[data-mode="tablet"] .filters{gap:6px;margin-bottom:10px}
+[data-mode="phone"] .filters .btn,[data-mode="tablet"] .filters .btn{padding:7px 12px;font-size:11.5px;min-height:34px}
+/* 16px is the threshold below which iOS Safari zooms the page on focus. */
+[data-mode="phone"] input[type=text],[data-mode="phone"] input[type=number],
+[data-mode="phone"] select,[data-mode="phone"] textarea,
+[data-mode="tablet"] input[type=text],[data-mode="tablet"] input[type=number],
+[data-mode="tablet"] select,[data-mode="tablet"] textarea{font-size:16px;padding:10px 11px}
+
+/* -------------------------------- phone: menu bar -------------------------------- */
+#apptitle{display:none}
+[data-mode="phone"] #menubar{height:auto;flex-wrap:wrap;gap:8px;padding:7px 11px 0;overflow:visible}
+[data-mode="phone"] .brand{font-size:10px;gap:6px;flex:0 0 auto}
+[data-mode="phone"] #apptitle{display:block;flex:1 1 auto;min-width:0;font-size:12px;font-weight:800;
+  font-stretch:108%;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-mode="phone"] #clockbox{gap:7px;font-size:10.5px;flex:0 0 auto}
+[data-mode="phone"] #sessionpill{display:none}
+[data-mode="phone"] #ticker{order:9;flex:1 0 100%;gap:15px;margin-top:6px;padding:6px 0 7px;
+  border-top:1px solid var(--line-soft);-webkit-overflow-scrolling:touch}
+[data-mode="phone"] .tk{font-size:11.5px}
+/* A landscape phone has ~390px of height to spend — the ticker row and a
+   tall tab bar are the first things to go. */
+[data-mode="phone"][data-orient="landscape"] #ticker{display:none}
+[data-mode="phone"][data-orient="landscape"] #menubar{padding-bottom:7px}
+[data-mode="phone"][data-orient="landscape"] .dapp{height:42px;gap:2px}
+[data-mode="phone"][data-orient="landscape"] .dapp svg{width:18px;height:18px}
+[data-mode="phone"][data-orient="landscape"] .wbody{padding:11px 14px 16px}
+
+/* -------------------------------- phone: tab bar -------------------------------- */
+[data-mode="phone"] #dock{height:auto;gap:0;padding:0 2px calc(2px + env(safe-area-inset-bottom,0px));
+  display:grid;grid-auto-flow:column;grid-auto-columns:1fr;overflow:visible}
+[data-mode="phone"] .dapp{width:auto;height:52px;gap:4px;border:0;border-radius:0;background:none}
+[data-mode="phone"] .dapp:hover{background:none}
+[data-mode="phone"] .dapp.on{background:none;border-color:transparent}
+[data-mode="phone"] .dapp svg{width:21px;height:21px}
+[data-mode="phone"] .dapp span{font-size:9.5px;letter-spacing:.04em}
+[data-mode="phone"] .dapp.on::after{bottom:3px;width:22px}
+[data-mode="phone"] .dapp .badge{top:2px;right:auto;left:50%;margin-left:6px}
+
+/* -------------------------------- phone: one app at a time -------------------------------- */
+[data-mode="phone"] .win:not(.top){display:none}
+[data-mode="phone"] .wbody{padding:13px 14px 22px}
+
+/* -------------------------------- phone: sheet -------------------------------- */
+#scrim{position:fixed;inset:0;z-index:9500;background:rgba(2,5,10,.55)}
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:9600;background:var(--surface);
+  border-top:1px solid var(--line);border-radius:13px 13px 0 0;
+  padding:6px 12px calc(16px + env(safe-area-inset-bottom,0px));
+  box-shadow:0 -20px 50px -22px rgba(0,0,0,.85);animation:sheetin .17s ease-out}
+@keyframes sheetin{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.shandle{width:36px;height:4px;border-radius:2px;background:var(--line);margin:5px auto 11px}
+#sheetapps{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.sapp{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
+  padding:13px 4px;border-radius:var(--r);border:1px solid var(--line-soft);
+  background:var(--surface-2);color:var(--ink-2)}
+.sapp.on{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.sapp svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.sapp span{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+
+/* -------------------------------- tablet: tiled panes -------------------------------- */
+[data-mode="tablet"] #desktop{display:flex;gap:1px;background:var(--line)}
+[data-mode="tablet"][data-orient="portrait"] #desktop{flex-direction:column}
+.pane{flex:1 1 0;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--ground)}
+.pane[hidden]{display:none}
+[data-mode="tablet"][data-orient="landscape"] .pane.a{flex:0 0 38%}
+[data-mode="tablet"][data-orient="portrait"] .pane.a{flex:0 0 44%}
+.pstrip{flex:0 0 auto;display:flex;align-items:center;gap:4px;min-height:41px;padding:0 7px;
+  background:var(--ground-2);border-bottom:1px solid var(--line)}
+.ptabs{flex:1 1 auto;display:flex;gap:3px;min-width:0;overflow-x:auto;scrollbar-width:none}
+.ptabs::-webkit-scrollbar{display:none}
+.ptab{flex:0 0 auto;padding:6px 11px;border-radius:var(--r);border:1px solid transparent;
+  font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+.ptab.on{color:var(--accent);border-color:var(--line);background:var(--surface)}
+.ptab .badge{display:inline-grid;place-items:center;min-width:14px;height:14px;padding:0 3px;margin-left:5px;
+  border-radius:7px;background:var(--short);color:#fff;font-size:9px;font-family:var(--mono)}
+.pact{flex:0 0 auto;display:flex;gap:4px}
+.pbtn{width:31px;height:31px;border-radius:var(--r);border:1px solid var(--line);
+  display:grid;place-items:center;color:var(--ink-3);background:var(--surface)}
+.pbtn:hover{color:var(--ink);border-color:var(--ink-3)}
+.pbtn svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.phost{flex:1 1 auto;position:relative;min-height:0}
+.pempty{flex:1 1 auto;display:grid;place-items:center;padding:20px;text-align:center}
+[data-mode="tablet"] .win:not(.active){display:none}
+[data-mode="tablet"] .wbody{padding:13px 15px 18px}
+
+/* -------------------------------- tablet: dock -------------------------------- */
+[data-mode="tablet"] #dock{height:62px;gap:5px;padding:0 8px calc(0px + env(safe-area-inset-bottom,0px))}
+[data-mode="tablet"] .dapp{width:66px;height:50px}
+[data-mode="tablet"] .dapp svg{width:19px;height:19px}
+[data-mode="tablet"][data-orient="landscape"] #os{
+  grid-template-columns:var(--rail) minmax(0,1fr);
+  grid-template-rows:var(--bar) minmax(0,1fr);
+  grid-template-areas:"bar bar" "dock desk"}
+[data-mode="tablet"][data-orient="landscape"] #dock{
+  height:auto;width:var(--rail);flex-direction:column;align-items:stretch;justify-content:flex-start;
+  gap:3px;padding:9px 7px calc(9px + env(safe-area-inset-bottom,0px));
+  border-top:0;border-right:1px solid var(--line);overflow-y:auto;overflow-x:hidden}
+[data-mode="tablet"][data-orient="landscape"] .dapp{width:auto;height:54px;flex:0 0 auto}
+[data-mode="tablet"][data-orient="landscape"] .dapp.on::after{
+  bottom:auto;top:50%;left:-7px;transform:translateY(-50%);width:2px;height:22px}
+[data-mode="tablet"][data-orient="portrait"] #desktop{padding-bottom:0}
+
+/* -------------------------------- content: phone + tablet -------------------------------- */
+[data-mode="phone"] .lab,[data-mode="tablet"] .lab{font-size:10px}
+[data-mode="phone"] .note,[data-mode="tablet"] .note{font-size:11.5px;line-height:1.6}
+[data-mode="phone"] .chip,[data-mode="tablet"] .chip{font-size:10px;padding:2px 7px}
+[data-mode="phone"] table,[data-mode="tablet"] table{font-size:12.5px}
+[data-mode="phone"] .gate,[data-mode="tablet"] .gate{font-size:12.5px;padding:10px 12px}
+[data-mode="phone"] .banner,[data-mode="tablet"] .banner{font-size:11.5px;padding:10px 12px}
+
+/* signal: the factor bar gets its own row rather than a 78px sliver */
+[data-mode="phone"] .fac{grid-template-columns:1fr auto;grid-template-areas:"fn fv" "bar bar";
+  gap:5px 10px;padding:10px 0}
+[data-mode="phone"] .fac .fn{grid-area:fn;font-size:12.5px}
+[data-mode="phone"] .fac .fn small{font-size:11px}
+[data-mode="phone"] .fac .fv{grid-area:fv;font-size:14px}
+[data-mode="phone"] .fac .fbar{grid-area:bar;height:8px}
+[data-mode="tablet"] .fac{grid-template-columns:1fr 110px 46px}
+[data-mode="phone"] .verdict h2{font-size:26px}
+[data-mode="phone"] .verdict .sub,[data-mode="tablet"] .verdict .sub{font-size:12px}
+[data-mode="phone"] .meter,[data-mode="tablet"] .meter{height:11px}
+[data-mode="phone"] .rowsplit,[data-mode="tablet"] .rowsplit{font-size:12.5px}
+
+/* wire */
+[data-mode="phone"] .item{grid-template-columns:46px 1fr;gap:12px;padding:12px 0}
+[data-mode="phone"] .item h4{font-size:14px}
+[data-mode="phone"] .item .sc{font-size:16px}
+[data-mode="phone"] .item .meta,[data-mode="tablet"] .item .meta{font-size:10.5px;gap:7px}
+[data-mode="phone"] .item .why,[data-mode="tablet"] .item .why{font-size:12px}
+[data-mode="tablet"] .item h4{font-size:13.5px}
+
+/* catalysts: the countdown drops under the clock instead of squeezing a third column */
+[data-mode="phone"] .ev{grid-template-columns:56px 1fr;gap:4px 11px;padding:10px 0}
+[data-mode="phone"] .ev .cd{grid-column:1;grid-row:2;text-align:left}
+[data-mode="phone"] .ev .n{font-size:13px}
+[data-mode="phone"] .ev .n small{font-size:11.5px}
+[data-mode="tablet"] .ev .n{font-size:12.5px}
+
+/* tape */
+[data-mode="phone"] .qgrid{grid-template-columns:1fr 1fr}
+[data-mode="tablet"] .qgrid{grid-template-columns:repeat(auto-fill,minmax(134px,1fr))}
+[data-mode="phone"] .q .p{font-size:18px}
+[data-mode="phone"] .ladder{height:232px;margin-left:58px}
+[data-mode="phone"] .lvl,[data-mode="tablet"] .lvl{font-size:12.5px;padding:7px 0}
+[data-mode="phone"] .lvl .nm,[data-mode="tablet"] .lvl .nm{font-size:12px}
+
+/* playbook / journal / brief / settings */
+[data-mode="phone"] .cond,[data-mode="tablet"] .cond{font-size:12px;padding:5px 0}
+[data-mode="phone"] .setup h4,[data-mode="tablet"] .setup h4{font-size:13.5px}
+[data-mode="phone"] .statgrid{grid-template-columns:1fr 1fr}
+[data-mode="phone"] .jrow{grid-template-columns:auto 1fr;gap:5px 10px}
+[data-mode="phone"] .jrow>:last-child{grid-column:2;display:flex;align-items:center;gap:10px}
+[data-mode="phone"] .jrow .pl{text-align:left}
+[data-mode="phone"] .g2{grid-template-columns:1fr}
+[data-mode="phone"] .g3{grid-template-columns:1fr 1fr}
+[data-mode="phone"] .briefout,[data-mode="tablet"] .briefout{height:auto;min-height:44vh;font-size:12px}
+[data-mode="phone"] .msg,[data-mode="tablet"] .msg{font-size:13px}
+
+@media (prefers-reduced-motion:reduce){
+  #sheet{animation:none}
 }
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.01ms!important;transition-duration:.01ms!important}
@@ -342,6 +546,7 @@ tr:last-child td{border-bottom:0}
 <div id="os" hidden>
   <header id="menubar">
     <div class="brand"><span class="dot" id="syslamp"></span>NQ&nbsp;<b>OS</b></div>
+    <div id="apptitle" aria-live="polite"></div>
     <div id="ticker"></div>
     <div id="clockbox">
       <span id="sessionpill">&#8212;</span>
@@ -356,6 +561,13 @@ tr:last-child td{border-bottom:0}
   </main>
 
   <nav id="dock" aria-label="Applications"></nav>
+
+  <div id="scrim" hidden></div>
+  <div id="sheet" role="dialog" aria-modal="true" aria-label="More applications" hidden>
+    <div class="shandle"></div>
+    <div class="lab" style="padding:0 4px 8px">More</div>
+    <div id="sheetapps"></div>
+  </div>
 </div>
 
 <script>
@@ -823,8 +1035,59 @@ const APPS=[
   {id:"brief",  name:"Brief",    icon:ICON.brief, w:520,h:520,x:200,y:80},
   {id:"set",    name:"Settings", icon:ICON.gear,  w:420,h:450,x:260,y:110}
 ];
+/* ---------------------------------------------------------- device mode
+   One source of truth for which world we are in. The stylesheet keys off
+   data-mode / data-orient on <html> and the window manager keys off `mode`;
+   both are written by applyMode(), so they cannot drift apart the way a
+   media query and a matchMedia() call quietly do.
+   ---------------------------------------------------------------------- */
+const COARSE=matchMedia("(pointer:coarse)");
+function deviceMode(){
+  const w=innerWidth, short=Math.min(innerWidth,innerHeight);
+  if(w<=700) return "phone";
+  /* A phone turned sideways is still a phone: it is the short side that says
+     what the device is, not the side that happens to be horizontal. */
+  if(COARSE.matches&&short<=480) return "phone";
+  /* A fine-pointer window too narrow for four floating windows is better
+     served tiled than windowed, so it lands in the tablet shell too. */
+  if(w<=1180||(COARSE.matches&&short<=1024)) return "tablet";
+  return "desktop";
+}
+let mode=deviceMode();
+const isPhone =()=>mode==="phone";
+const isTablet=()=>mode==="tablet";
+const isDesk  =()=>mode==="desktop";
+function applyMode(){
+  const r=document.documentElement;
+  r.dataset.mode=mode;
+  r.dataset.orient=innerWidth>=innerHeight?"landscape":"portrait";
+}
+applyMode();
+
 const wins={}; let zTop=10, focused=null;
-const isPhone=()=>window.matchMedia("(max-width:760px)").matches;
+
+/* phone: these four own the tab bar, everything else lives in the sheet */
+const PHONE_TABS=["signal","wire","cat","tape"];
+/* tablet: A is the reference column, B the working column */
+const PANE_OF={signal:"A"};
+const paneActive={A:null,B:null};
+
+const MORE_ICON='<svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1"/>'+
+  '<rect x="13.5" y="4" width="6.5" height="6.5" rx="1"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1"/>'+
+  '<rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1"/></svg>';
+const SWAP_ICON='<svg viewBox="0 0 24 24"><path d="M4 9h13l-3.5-3.5M17 9l-3.5 3.5"/>'+
+  '<path d="M20 15H7l3.5-3.5M7 15l3.5 3.5"/></svg>';
+const SHUT_ICON='<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+/* Is this window actually on screen? Phone shows one app, tablet one per
+   pane — anything hidden is marked dirty instead of re-rendered every tick. */
+const visible=w=>{
+  if(!w||w.min) return false;
+  if(isPhone())  return w.node.classList.contains("top");
+  if(isTablet()) return w.node.classList.contains("active");
+  return true;
+};
+function showApp(id){ const w=wins[id]; if(w&&w.dirty&&visible(w)){ w.dirty=false; renderApp(id); } }
 
 function openApp(id){
   const app=APPS.find(a=>a.id===id); if(!app) return;
@@ -832,11 +1095,13 @@ function openApp(id){
   if(!w){
     const node=el("section","win");
     node.dataset.app=id;
-    const dw=Math.min(app.w,Math.max(280,innerWidth-28));
-    const dh=Math.min(app.h,Math.max(180,$("#desktop").clientHeight-28));
-    node.style.width=dw+"px"; node.style.height=dh+"px";
-    node.style.left=Math.max(8,Math.min(app.x,innerWidth-dw-10))+"px";
-    node.style.top =Math.max(8,Math.min(app.y,$("#desktop").clientHeight-dh-10))+"px";
+    if(isDesk()){
+      const dw=Math.min(app.w,Math.max(280,innerWidth-28));
+      const dh=Math.min(app.h,Math.max(180,$("#desktop").clientHeight-28));
+      node.style.width=dw+"px"; node.style.height=dh+"px";
+      node.style.left=Math.max(8,Math.min(app.x,innerWidth-dw-10))+"px";
+      node.style.top =Math.max(8,Math.min(app.y,$("#desktop").clientHeight-dh-10))+"px";
+    }
     node.innerHTML=
       '<div class="wbar"><div class="wtitle"><em>&#9679;</em>'+app.name+'</div><div class="wbtns">'+
       '<button class="wbtn min" title="Minimise"><svg viewBox="0 0 8 8"><path d="M1 4h6"/></svg></button>'+
@@ -844,7 +1109,8 @@ function openApp(id){
       '<button class="wbtn x" title="Close"><svg viewBox="0 0 8 8"><path d="M1 1l6 6M7 1L1 7"/></svg></button>'+
       '</div></div><div class="wbody"></div><div class="grip"></div>';
     $("#desktop").appendChild(node);
-    w=wins[id]={node,body:$(".wbody",node),app,min:false,max:false,rect:null};
+    w=wins[id]={node,body:$(".wbody",node),app,min:false,max:false,rect:null,
+                pane:PANE_OF[id]||"B",dirty:false};
     wireWindow(w);
     renderApp(id);
   }
@@ -853,15 +1119,36 @@ function openApp(id){
 }
 function focus(id){
   const w=wins[id]; if(!w) return;
+  /* Every tap inside a window lands here, so only rebuild the shell when the
+     selection actually moved — otherwise each tap churns the tab strips. */
+  const moved=focused!==id||(isTablet()&&paneActive[w.pane]!==id);
   focused=id; zTop++; w.node.style.zIndex=zTop;
   for(const k in wins){wins[k].node.classList.toggle("focus",k===id); wins[k].node.classList.toggle("top",k===id);}
+  if(isTablet()) paneActive[w.pane]=id;
+  if(!isDesk()&&moved) relayout();
+  paintTitle(); showApp(id);
 }
-function closeApp(id){ const w=wins[id]; if(!w)return; w.node.remove(); delete wins[id];
-  const keys=Object.keys(wins); if(keys.length) focus(keys[keys.length-1]); paintDock(); }
+/* The phone bar names the app on screen — the tab bar icon alone is not
+   enough context once you have scrolled into a list. */
+function paintTitle(){
+  const at=$("#apptitle"); if(!at) return;
+  at.textContent=isPhone()&&focused&&wins[focused]?wins[focused].app.name:"";
+}
+function closeApp(id){
+  const w=wins[id]; if(!w) return;
+  const pane=w.pane;
+  w.node.remove(); delete wins[id];
+  if(paneActive[pane]===id) paneActive[pane]=null;
+  const keys=Object.keys(wins);
+  let next=isTablet()?keys.filter(k=>wins[k].pane===pane).pop():null;
+  if(!next) next=keys[keys.length-1]||null;
+  if(next) focus(next); else if(!isDesk()) relayout();
+  paintDock();
+}
 function toggleApp(id){
   const w=wins[id];
   if(!w) return openApp(id);
-  if(isPhone()) return focus(id);
+  if(!isDesk()) return openApp(id);           // touch shells never minimise
   if(focused===id&&!w.min){ w.min=true; w.node.classList.add("min"); paintDock();
     const k=Object.keys(wins).filter(x=>!wins[x].min); if(k.length)focus(k[k.length-1]); return; }
   openApp(id);
@@ -877,35 +1164,169 @@ function wireWindow(w){
     else{w.rect={left:w.node.style.left,top:w.node.style.top,width:w.node.style.width,height:w.node.style.height};
       Object.assign(w.node.style,{left:"6px",top:"6px",width:(d.clientWidth-12)+"px",height:(d.clientHeight-12)+"px"});w.max=true;}
   };
-  let sx,sy,ox,oy,mode=null;
-  const down=(e,m)=>{ if(isPhone())return; mode=m; sx=e.clientX; sy=e.clientY;
+  let sx,sy,ox,oy,mode_=null;
+  const down=(e,m)=>{ if(!isDesk())return; mode_=m; sx=e.clientX; sy=e.clientY;
     ox=parseFloat(w.node.style.left); oy=parseFloat(w.node.style.top);
     w.sw=w.node.offsetWidth; w.sh=w.node.offsetHeight;
     e.target.setPointerCapture&&e.target.setPointerCapture(e.pointerId);
     bar.classList.toggle("drag",m==="move"); e.preventDefault(); };
-  const move=e=>{ if(!mode)return; const dx=e.clientX-sx,dy=e.clientY-sy,d=$("#desktop");
-    if(mode==="move"){ w.node.style.left=clamp(ox+dx,-w.sw+70,d.clientWidth-60)+"px";
-                       w.node.style.top =clamp(oy+dy,0,d.clientHeight-30)+"px"; }
+  const move=e=>{ if(!mode_)return; const dx=e.clientX-sx,dy=e.clientY-sy,d=$("#desktop");
+    if(mode_==="move"){ w.node.style.left=clamp(ox+dx,-w.sw+70,d.clientWidth-60)+"px";
+                        w.node.style.top =clamp(oy+dy,0,d.clientHeight-30)+"px"; }
     else { w.node.style.width =Math.max(270,w.sw+dx)+"px";
            w.node.style.height=Math.max(150,w.sh+dy)+"px"; } };
-  const up=()=>{mode=null;bar.classList.remove("drag");};
+  const up=()=>{mode_=null;bar.classList.remove("drag");};
   bar.addEventListener("pointerdown",e=>{ if(e.target.closest(".wbtn"))return; down(e,"move"); });
   $(".grip",w.node).addEventListener("pointerdown",e=>down(e,"size"));
   addEventListener("pointermove",move); addEventListener("pointerup",up); addEventListener("pointercancel",up);
 }
-function paintDock(){
-  const d=$("#dock"); d.innerHTML="";
-  for(const a of APPS){
-    const open=!!wins[a.id], b=el("button","dapp"+(open&&!wins[a.id].min?" on":""));
-    b.innerHTML=a.icon+"<span>"+a.name+"</span>";
-    if(a.id==="wire"){
-      const n=state.wire.filter(w=>w.impact===3&&Date.now()-w.ts<5400000).length;
-      if(n) b.appendChild(el("i","badge",String(n)));
-    }
-    b.onclick=()=>toggleApp(a.id);
-    d.appendChild(b);
+
+/* =====================================================================
+   LAYOUT SHELLS
+   phone  — one full-bleed app, the tab bar navigates
+   tablet — two tiled panes, each with its own tab strip
+   ===================================================================== */
+function relayout(){ if(isPhone()) layoutPhone(); else if(isTablet()) layoutTablet(); }
+
+function dropPanes(){
+  const desk=$("#desktop"); if(!$(".pane",desk)) return;
+  for(const k in wins) desk.appendChild(wins[k].node);
+  desk.querySelectorAll(".pane").forEach(n=>n.remove());
+}
+function layoutPhone(){
+  dropPanes();
+  const desk=$("#desktop");
+  let top=null;
+  for(const k in wins){
+    const n=wins[k].node;
+    if(n.parentNode!==desk) desk.appendChild(n);
+    n.classList.remove("active");
+    if(n.classList.contains("top")) top=k;
+  }
+  if(!top){
+    const ks=Object.keys(wins);
+    if(ks.length){ const k=ks[ks.length-1]; wins[k].node.classList.add("top"); focused=k; }
   }
 }
+function makePane(k){
+  const p=el("div","pane "+k.toLowerCase()); p.id="pane"+k;
+  p.innerHTML='<div class="pstrip"><div class="ptabs"></div><div class="pact"></div></div>'+
+              '<div class="phost"></div>';
+  return p;
+}
+function layoutTablet(){
+  const desk=$("#desktop");
+  let A=$("#paneA");
+  if(!A){
+    desk.querySelectorAll(".pane").forEach(n=>n.remove());
+    desk.appendChild(makePane("A")); desk.appendChild(makePane("B"));
+    A=$("#paneA");
+  }
+  const pane={A:A,B:$("#paneB")};
+  const host={A:$(".phost",pane.A),B:$(".phost",pane.B)};
+  const bucket={A:[],B:[]};
+  for(const a of APPS){
+    const w=wins[a.id]; if(!w) continue;
+    if(w.pane!=="A") w.pane="B";
+    bucket[w.pane].push(a.id);
+    if(w.node.parentNode!==host[w.pane]) host[w.pane].appendChild(w.node);
+  }
+  for(const k of ["A","B"]){
+    const list=bucket[k];
+    /* an empty reference column collapses; the working column keeps a hint */
+    pane[k].hidden=(k==="A"&&!list.length);
+    /* A pane with no valid selection falls back to the first app in dock
+       order, so a rebuilt working pane lands on the Wire, not whatever
+       happened to be created last. */
+    if(!list.includes(paneActive[k])) paneActive[k]=list[0]||null;
+    for(const id of list) wins[id].node.classList.toggle("active",id===paneActive[k]);
+    paintStrip(pane[k],k,list);
+  }
+  showApp(paneActive.A); showApp(paneActive.B);
+}
+function paintStrip(pane,k,list){
+  const tabs=$(".ptabs",pane), act=$(".pact",pane), host=$(".phost",pane);
+  tabs.innerHTML=""; act.innerHTML="";
+  let empty=$(".pempty",pane);
+  if(!list.length){
+    host.hidden=true;
+    if(!empty) pane.appendChild(el("div","pempty",
+      '<div class="note">Nothing open in this pane. Pick an app from the rail, or send one '+
+      'across with the arrows in the other pane.</div>'));
+    return;
+  }
+  host.hidden=false;
+  if(empty) empty.remove();
+  for(const id of list){
+    const a=APPS.find(x=>x.id===id);
+    const t=el("button","ptab"+(id===paneActive[k]?" on":""),a.name);
+    if(id==="wire"){ const n=wireBadge(); if(n) t.appendChild(el("i","badge",String(n))); }
+    t.onclick=()=>{ paneActive[k]=id; focus(id); };
+    tabs.appendChild(t);
+  }
+  const mv=el("button","pbtn",SWAP_ICON);
+  mv.title="Move to the other pane"; mv.setAttribute("aria-label","Move to the other pane");
+  mv.onclick=()=>movePane(paneActive[k]);
+  const cl=el("button","pbtn",SHUT_ICON);
+  cl.title="Close"; cl.setAttribute("aria-label","Close");
+  cl.onclick=()=>closeApp(paneActive[k]);
+  act.appendChild(mv); act.appendChild(cl);
+}
+function movePane(id){
+  const w=wins[id]; if(!w) return;
+  w.pane=w.pane==="A"?"B":"A";
+  paneActive[w.pane]=id;
+  layoutTablet(); paintDock();
+}
+
+/* =====================================================================
+   DOCK — bottom tab bar on a phone, icon rail on a tablet, dock on a desk
+   ===================================================================== */
+function wireBadge(){ return state.wire.filter(w=>w.impact===3&&Date.now()-w.ts<5400000).length; }
+function dockBtn(a){
+  const w=wins[a.id], on=!!w&&(isDesk()?!w.min:visible(w));
+  const b=el("button","dapp"+(on?" on":""));
+  b.innerHTML=a.icon+"<span>"+a.name+"</span>";
+  b.setAttribute("aria-label",a.name);
+  if(a.id==="wire"){ const n=wireBadge(); if(n) b.appendChild(el("i","badge",String(n))); }
+  return b;
+}
+function paintDock(){
+  const d=$("#dock"); d.innerHTML="";
+  if(isPhone()){
+    for(const id of PHONE_TABS){
+      const a=APPS.find(x=>x.id===id), b=dockBtn(a);
+      b.onclick=()=>{ closeSheet(); toggleApp(a.id); };
+      d.appendChild(b);
+    }
+    const rest=APPS.filter(a=>!PHONE_TABS.includes(a.id));
+    const open=rest.some(a=>visible(wins[a.id]));
+    const more=el("button","dapp"+(open?" on":""),MORE_ICON+"<span>More</span>");
+    more.setAttribute("aria-label","More applications");
+    more.onclick=toggleSheet;
+    d.appendChild(more);
+    paintSheet();
+    return;
+  }
+  for(const a of APPS){ const b=dockBtn(a); b.onclick=()=>toggleApp(a.id); d.appendChild(b); }
+}
+
+/* ------------------------------------------------- phone: the more sheet */
+function paintSheet(){
+  const host=$("#sheetapps"); if(!host) return;
+  host.innerHTML="";
+  for(const a of APPS){
+    if(PHONE_TABS.includes(a.id)) continue;
+    const b=el("button","sapp"+(visible(wins[a.id])?" on":""),a.icon+"<span>"+a.name+"</span>");
+    b.onclick=()=>{ closeSheet(); openApp(a.id); };
+    host.appendChild(b);
+  }
+}
+function openSheet(){ paintSheet(); $("#sheet").hidden=false; $("#scrim").hidden=false; }
+function closeSheet(){ const s=$("#sheet"),c=$("#scrim"); if(s)s.hidden=true; if(c)c.hidden=true; }
+function toggleSheet(){ $("#sheet").hidden?openSheet():closeSheet(); }
+$("#scrim").onclick=closeSheet;
+addEventListener("keydown",e=>{ if(e.key==="Escape") closeSheet(); });
 
 /* =====================================================================
    APPS
@@ -913,7 +1334,9 @@ function paintDock(){
 const R={};
 function renderApp(id){ const w=wins[id]; if(!w||!R[id])return;
   const keep=w.body.scrollTop; R[id](w.body); w.body.scrollTop=keep; }
-function renderAll(){ for(const id in wins) if(!wins[id].min) renderApp(id); }
+/* A window the shell is not showing is marked dirty rather than redrawn,
+   and caught up by showApp() the moment it comes back on screen. */
+function renderAll(){ for(const id in wins){ if(visible(wins[id])) renderApp(id); else wins[id].dirty=true; } }
 
 /* ------------------------------------------------------------- SIGNAL */
 R.signal=function(b){
@@ -1206,13 +1629,13 @@ R.jrnl=function(b){
     : "No separation yet between the signal on winners and losers. Keep logging.")+'</div>';
 
   h+='<div class="panel" style="margin-bottom:12px"><div class="lab" style="margin-bottom:6px">New entry</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">'+
+    '<div class="g2">'+
     '<select id="j-dir"><option value="L"'+(p.dir==="L"?" selected":"")+'>Long</option>'+
     '<option value="S"'+(p.dir==="S"?" selected":"")+'>Short</option></select>'+
     '<select id="j-setup">'+setups().map(s=>'<option>'+esc(s.n)+'</option>').join("")+'</select>'+
     '</div>'+
     '<input type="text" id="j-cat" placeholder="Catalyst — the headline or event you traded" value="'+esc(p.catalyst||"")+'" style="margin-top:7px">'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-top:7px">'+
+    '<div class="g3" style="margin-top:7px">'+
     '<input type="number" id="j-score" placeholder="score" value="'+(p.score!=null?p.score:"")+'">'+
     '<input type="number" id="j-conf" placeholder="conf %" value="'+(p.conf!=null?p.conf:"")+'">'+
     '<input type="number" id="j-pts" placeholder="result pts">'+
@@ -1409,15 +1832,14 @@ R.brief=function(b){
   h+='<div class="filters">'+
     opt("cal","Calendar",briefCfg.cal)+opt("play","Playbook",briefCfg.play)+
     opt("jrnl","Journal",briefCfg.jrnl)+opt("method","Methodology",briefCfg.method)+
-    '<button class="btn" data-w="-">Wire \u2212</button>'+
+    '<span class="stepper"><button class="btn" data-w="-">Wire \u2212</button>'+
     '<span class="chip">'+briefCfg.wire+' headlines</span>'+
-    '<button class="btn" data-w="+">Wire +</button></div>';
+    '<button class="btn" data-w="+">Wire +</button></span></div>';
   h+='<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">'+
      '<button class="btn pri" id="bp-copy">Copy prompt</button>'+
      '<span class="note" id="bp-msg">'+text.length.toLocaleString()+' characters \u00b7 roughly '+
      Math.round(text.length/4).toLocaleString()+' tokens</span></div>';
-  h+='<textarea id="bp-out" readonly spellcheck="false" style="min-height:260px;height:calc(100% - 132px);'+
-     'font-family:var(--mono);font-size:11px;line-height:1.5"></textarea>';
+  h+='<textarea id="bp-out" class="briefout" readonly spellcheck="false"></textarea>';
   b.innerHTML=h;
   $("#bp-out",b).value=text;
 
@@ -1460,7 +1882,7 @@ R.set=function(b){
   h+=row("Instrument",
     '<select id="s-inst"><option value="NQ"'+(c.instrument==="NQ"?" selected":"")+'>NQ — $20 per point</option>'+
     '<option value="MNQ"'+(c.instrument==="MNQ"?" selected":"")+'>MNQ — $2 per point</option></select>');
-  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">'+
+  h+='<div class="g2" style="gap:9px">'+
     row("Risk per trade ($)",'<input type="number" id="s-risk" value="'+c.riskPerTrade+'" step="50">')+
     row("Stop (points)",'<input type="number" id="s-stop" value="'+c.stopPts+'" step="1">')+
     row("Min score to engage",'<input type="number" id="s-ms" value="'+c.minScore+'" step="1">')+
@@ -1550,11 +1972,13 @@ function paintChrome(){
   h+='<span class="tk"><i>BIAS</i><b class="'+cls(s.composite)+'">'+(s.composite>0?"+":"")+s.composite+
      '</b><span style="color:var(--ink-3)">'+s.conf+'%</span></span>';
   $("#ticker").innerHTML=h;
+  paintTitle();
 }
 function renderLive(){
   const LIVE=["signal","cat","tape","play","wire"];
   for(const id of LIVE){
-    const w=wins[id]; if(!w||w.min) continue;
+    const w=wins[id]; if(!w) continue;
+    if(!visible(w)){ w.dirty=true; continue; }
     if(w.node.contains(document.activeElement)) continue;
     renderApp(id);
   }
@@ -1617,34 +2041,70 @@ async function pollFeed(){
 function place(id,x,y,w,h){ const n=wins[id]&&wins[id].node; if(!n)return;
   n.style.left=Math.round(x)+"px"; n.style.top=Math.round(y)+"px";
   n.style.width=Math.round(w)+"px"; n.style.height=Math.round(h)+"px"; }
-function defaultLayout(){
+/* Arrange the floating windows. `open` is false when we are re-tiling after
+   a return from a touch shell, where the set of open apps is whatever the
+   user left behind rather than the default four. */
+const TILED=["signal","wire","cat","tape"];
+function desktopTile(open){
   const d=$("#desktop"), W=d.clientWidth, H=d.clientHeight, g=10;
-  if(isPhone()){ openApp("cat"); openApp("wire"); openApp("signal"); return; }
   if(W>=1180){
     const c1=Math.min(440,W*.30), c3=Math.min(370,W*.26), c2=W-c1-c3-g*4;
-    openApp("tape"); openApp("cat"); openApp("wire"); openApp("signal");
+    if(open){ openApp("tape"); openApp("cat"); openApp("wire"); openApp("signal"); }
     place("signal",g,g,c1,H-g*2);
     place("wire",c1+g*2,g,c2,H*.57-g*1.5);
     place("cat",c1+g*2,H*.57+g*.5,c2,H*.43-g*1.5);
     place("tape",c1+c2+g*3,g,c3,H-g*2);
-  }else if(W>=840){
+  }else{
     const c1=W*.44, c2=W-c1-g*3;
-    openApp("cat"); openApp("wire"); openApp("signal");
+    if(open){ openApp("cat"); openApp("wire"); openApp("signal"); }
     place("signal",g,g,c1,H-g*2);
     place("wire",c1+g*2,g,c2,H*.56-g*1.5);
     place("cat",c1+g*2,H*.56+g*.5,c2,H*.44-g*1.5);
-  }else{
-    openApp("wire"); openApp("signal");
-    place("wire",g,H*.54+g*.5,W-g*2,H*.46-g*1.5);
-    place("signal",g,g,W-g*2,H*.54-g*1.5);
+  }
+  /* anything else the user had open cascades out of the corner */
+  let i=0;
+  for(const a of APPS){
+    if(TILED.includes(a.id)||!wins[a.id]) continue;
+    place(a.id,30+i*26,24+i*24,Math.min(a.w,W-60),Math.min(a.h,H-60)); i++;
   }
 }
-addEventListener("resize",()=>{
+function defaultLayout(){
+  if(isPhone()){ openApp("cat"); openApp("wire"); openApp("signal"); return; }
+  if(isTablet()){ openApp("tape"); openApp("cat"); openApp("wire"); openApp("signal"); return; }
+  desktopTile(true);
+}
+
+/* Crossing a breakpoint rebuilds the shell around whatever is already open —
+   the windows themselves, and their rendered state, are never thrown away. */
+function switchMode(next){
+  mode=next; applyMode(); closeSheet();
+  if(isDesk()){
+    dropPanes();
+    const desk=$("#desktop");
+    for(const k in wins){
+      const n=wins[k].node;
+      if(n.parentNode!==desk) desk.appendChild(n);
+      n.classList.remove("active");
+    }
+    desktopTile(false);
+  }else relayout();
+  paintDock(); paintChrome(); renderAll();
+}
+let vpTimer=null;
+function onViewport(){
+  const next=deviceMode();
+  if(next!==mode) return switchMode(next);
+  applyMode();
+  if(!isDesk()) return relayout();
   const d=$("#desktop");
   for(const k in wins){ const n=wins[k].node;
     n.style.left=Math.max(0,Math.min(parseFloat(n.style.left)||0,d.clientWidth-70))+"px";
     n.style.top =Math.max(0,Math.min(parseFloat(n.style.top)||0,d.clientHeight-30))+"px"; }
-});
+}
+/* Mobile browsers fire resize every time the URL bar slides, so debounce. */
+const vp=()=>{ clearTimeout(vpTimer); vpTimer=setTimeout(onViewport,120); };
+addEventListener("resize",vp);
+addEventListener("orientationchange",()=>{ clearTimeout(vpTimer); vpTimer=setTimeout(onViewport,200); });
 
 /* =====================================================================
    BOOT
