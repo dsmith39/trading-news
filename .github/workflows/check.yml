@@ -1,0 +1,70 @@
+# Runs on every pull request. No AWS credentials, no OIDC, no deploy - this job
+# only proves the things that broke in production would have been caught: a
+# syntax error in the OS's inline script, a malformed stack template, a shell
+# script that will not parse.
+
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Feed and lambda sources parse
+        run: |
+          set -euo pipefail
+          for f in feed/core.mjs feed/sources.mjs feed/fetch-news.mjs aws/lambda/feed/index.mjs; do
+            node --check "$f"
+            echo "ok   $f"
+          done
+
+      - name: The OS's inline script parses
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("fs");
+            const s = fs.readFileSync("os/index.html", "utf8");
+            const m = s.match(/<script>([\s\S]*)<\/script>/);
+            if (!m) { console.error("no inline script found in os/index.html"); process.exit(1); }
+            if (!/<title>[^<]+<\/title>/.test(s)) { console.error("os/index.html has no <title>"); process.exit(1); }
+            fs.writeFileSync("/tmp/os.js", m[1]);
+          '
+          node --check /tmp/os.js
+          echo "ok   os/index.html"
+
+      - name: Shell scripts parse
+        run: |
+          set -euo pipefail
+          for f in aws/deploy.sh aws/destroy.sh; do
+            bash -n "$f"
+            echo "ok   $f"
+          done
+
+      - name: CloudFormation template parses
+        run: |
+          python3 - <<'PY'
+          import sys, yaml
+          class L(yaml.SafeLoader):
+              pass
+          for t in ["Ref","Sub","GetAtt","If","Not","Equals","And","Or","Join","Select","Split"]:
+              L.add_constructor("!" + t, lambda loader, node: None)
+          d = yaml.load(open("aws/stack.yaml"), Loader=L)
+          missing = [k for k in ("Parameters", "Resources", "Outputs") if k not in d]
+          if missing:
+              sys.exit("stack.yaml missing top-level: " + ", ".join(missing))
+          print("ok   aws/stack.yaml -", len(d["Resources"]), "resources,",
+                len(d["Parameters"]), "parameters")
+          PY

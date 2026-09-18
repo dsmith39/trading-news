@@ -198,7 +198,13 @@ think you can afford.
 ### Continuous deployment
 
 `.github/workflows/deploy.yml` ships the page and the feed function's code on
-every push that touches them, and on demand from the Actions tab.
+every push to `main` that touches them, and on demand from the Actions tab.
+`.github/workflows/check.yml` runs on every pull request and parses the OS's
+inline script, the feed sources, the shell scripts and the stack template — it
+holds no credentials and deploys nothing.
+
+Work goes on a branch and merges to `main` through a pull request; `main` is
+what deploys.
 
 The split is deliberate: **Actions deploys content, `deploy.sh` manages
 infrastructure.** Anything that changes the stack — the schedule, the domain,
