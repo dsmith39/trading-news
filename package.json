@@ -1,0 +1,13 @@
+{
+  "name": "nq-trading-os",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A windowed desktop for trading Nasdaq-100 futures off news, catalysts and sentiment.",
+  "scripts": {
+    "feed": "node feed/fetch-news.mjs",
+    "feed:print": "node feed/fetch-news.mjs --print",
+    "serve": "npx --yes http-server os -p 8088 -c-1"
+  },
+  "engines": { "node": ">=18" }
+}
