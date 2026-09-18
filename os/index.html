@@ -107,6 +107,11 @@ button{cursor:pointer;background:none;border:0}
 .tk i{font-style:normal;color:var(--ink-3);letter-spacing:.04em}
 .tk b{font-weight:500}
 #clockbox{display:flex;align-items:center;gap:8px;flex:0 0 auto;font-family:var(--mono);font-size:11px}
+#mktpick{flex:0 0 auto;max-width:170px;padding:2px 6px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r);color:var(--ink);
+  font-size:11px;font-weight:700;letter-spacing:.03em}
+#mktpick:hover{border-color:var(--accent)}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 #sessionpill{padding:2px 7px;border:1px solid var(--line);border-radius:999px;
   color:var(--ink-2);font-size:10px;letter-spacing:.06em;text-transform:uppercase;font-family:var(--ui);font-weight:600}
 #feedpill{padding:2px 7px;border-radius:999px;font-size:10px;letter-spacing:.06em;
@@ -545,7 +550,9 @@ tr:last-child td{border-bottom:0}
 
 <div id="os" hidden>
   <header id="menubar">
-    <div class="brand"><span class="dot" id="syslamp"></span>NQ&nbsp;<b>OS</b></div>
+    <div class="brand"><span class="dot" id="syslamp"></span>TRADING&nbsp;<b>OS</b></div>
+    <label class="visually-hidden" for="mktpick">Market to read</label>
+    <select id="mktpick" title="Which market this console is reading"></select>
     <div id="apptitle" aria-live="polite"></div>
     <div id="ticker"></div>
     <div id="clockbox">
@@ -634,11 +641,11 @@ function sessionOf(t){
 const MCODE={3:"H",6:"M",9:"U",12:"Z"};
 function thirdFriday(y,m){const d=new Date(Date.UTC(y,m-1,1));let c=0;
   for(let i=1;i<=31;i++){d.setUTCDate(i); if(d.getUTCMonth()!==m-1)break; if(d.getUTCDay()===5&&++c===3)return i;} return 21;}
-function frontMonth(t){
+function frontMonth(t,I){
   let y=t.y,m=[3,6,9,12].find(x=>x>=t.mo);
   if(m==null){m=3;y++;}
   if(m===t.mo && t.d>=thirdFriday(y,m)-8){const i=[3,6,9,12].indexOf(m); m=[3,6,9,12][(i+1)%4]; if(m===3)y++;}
-  return "NQ"+MCODE[m]+String(y%10);
+  return ((I&&I.n)||"NQ")+MCODE[m]+String(y%10);
 }
 
 /* ------------------------------------------------------ economic calendar
@@ -775,39 +782,175 @@ function scoreHeadline(text,regime){
    ===================================================================== */
 /* `lab` is the plain name shown on screen, `n` the ticker traders use, and
    `tip` the one-line explanation behind it. */
-const SYMS=[
-  {k:"nq", n:"NQ",   lab:"Nasdaq 100",  tip:"The 100 biggest companies on the Nasdaq, mostly technology. This is the one the whole tool is about.", px:29700, vol:13.0, d:2, inv:false},
-  {k:"es", n:"ES",   lab:"S&P 500",     tip:"The 500 biggest US companies — the broad US market.", px:7700,  vol:2.9,  d:2, inv:false},
-  {k:"rty",n:"RTY",  lab:"Smaller firms",tip:"An index of 2,000 smaller US companies. It shows whether the rally reaches beyond the giants.", px:2890, vol:1.9, d:1, inv:false},
-  {k:"vx", n:"VIX",  lab:"Fear gauge",  tip:"How much turbulence traders expect over the next month. High means nervous.", px:15.5,  vol:.10,  d:2, inv:true},
-  {k:"tnx",n:"US10Y",lab:"Borrowing rate",tip:"What it costs the US government to borrow for ten years. When it rises, shares — tech most of all — usually fall.", px:4.95, vol:.014, d:3, inv:true},
-  {k:"dxy",n:"DXY",  lab:"US dollar",   tip:"The dollar against other big currencies. A strong dollar tends to weigh on US share prices.", px:100.2, vol:.09,  d:2, inv:true},
-  {k:"gc", n:"GC",   lab:"Gold",        tip:"Where money goes when people want somewhere safe to put it.", px:4390,  vol:5.4,  d:1, inv:false},
-  {k:"cl", n:"CL",   lab:"Oil",         tip:"The oil price feeds into inflation, which feeds into interest rates.", px:101.1, vol:.28,  d:2, inv:false},
-  {k:"btc",n:"BTC",  lab:"Bitcoin",     tip:"Often moves with tech shares, and moves first when people turn brave or cautious.", px:77000, vol:160,  d:0, inv:false}
+/* Every market this console can read, and what moves each one.
+   `drivers` is the heart of it: which of the tracked series push this market,
+   and in which direction. +1 means "this series going up is good for it". A
+   weaker yen lifts the Nikkei because it lifts exporters; a weaker dollar lifts
+   oil and bitcoin; rising borrowing costs press on the Nasdaq. Those are
+   different sentences about the same tape, and they are why one engine can read
+   several markets. Mirrors feed/instruments.mjs. */
+const INSTR=[
+  {k:"nq", n:"NQ", lab:"Nasdaq 100", kind:"future", ccy:"USD", px:29700, vol:13, d:2, pt:20,
+   micro:{n:"MNQ",pt:2}, opt:"QQQ", bench:"es",
+   giants:true,
+   drivers:{tnx:-1,dxy:-.6,vx:-1},
+   topics:["nasdaq","tech","fed","inflation","chip","ai","megacap"],
+   tip:"The 100 biggest companies on the Nasdaq, mostly technology.",
+   why:"Long-dated growth. Borrowing costs and the dollar press on what it is worth."},
+
+  {k:"es", n:"ES", lab:"S&P 500", kind:"future", ccy:"USD", px:7700, vol:2.9, d:2, pt:50,
+   micro:{n:"MES",pt:5}, opt:"SPY", bench:null,
+   giants:true,
+   drivers:{tnx:-.7,dxy:-.5,vx:-1},
+   topics:["s&p","fed","inflation","earnings","economy"],
+   tip:"The 500 biggest US companies — the broad US market.",
+   why:"Wider and less rate-sensitive than the Nasdaq."},
+
+  {k:"rty", n:"RTY", lab:"Smaller US firms", kind:"future", ccy:"USD", px:2890, vol:1.9, d:1, pt:50,
+   micro:{n:"M2K",pt:5}, opt:"IWM", bench:"es",
+   giants:true,
+   drivers:{tnx:-1.2,dxy:-.3,vx:-1},
+   topics:["small cap","credit","fed","regional bank"],
+   tip:"Two thousand smaller US companies.",
+   why:"They borrow at floating rates, so they feel rate moves hardest of all."},
+
+  {k:"ym", n:"YM", lab:"Dow 30", kind:"future", ccy:"USD", px:52000, vol:120, d:0, pt:5,
+   micro:{n:"MYM",pt:0.5}, opt:"DIA", bench:"es",
+   giants:true,
+   drivers:{tnx:-.5,dxy:-.7,vx:-.9},
+   topics:["dow","industrial","tariff","trade"],
+   tip:"Thirty large, mostly old-economy US companies.",
+   why:"They sell abroad, so a strong dollar shrinks their overseas earnings."},
+
+  {k:"nkd", n:"NKD", lab:"Nikkei 225", kind:"future", ccy:"JPY", px:64800, vol:180, d:0, pt:5,
+   opt:null, bench:null,
+   drivers:{usdjpy:1,vx:-.8,tnx:-.2},
+   topics:["japan","boj","yen","carry trade","nikkei"],
+   tip:"Japan's main share index.",
+   why:"A weaker yen lifts Japanese exporters. When the Bank of Japan turns "+
+       "hawkish the yen strengthens, borrowed-yen trades unwind, and that "+
+       "selling reaches US tech too."},
+
+  {k:"cl", n:"CL", lab:"Oil", kind:"future", ccy:"USD", px:96, vol:.6, d:2, pt:1000,
+   micro:{n:"MCL",pt:100}, opt:"USO", bench:null,
+   drivers:{dxy:-1,vx:-.4},
+   topics:["opec","crude","oil","supply","sanction","inventories"],
+   tip:"US crude oil.",
+   why:"Priced in dollars, so a weaker dollar lifts it almost mechanically."},
+
+  {k:"gc", n:"GC", lab:"Gold", kind:"future", ccy:"USD", px:4430, vol:8, d:1, pt:100,
+   micro:{n:"MGC",pt:10}, opt:"GLD", bench:null,
+   drivers:{dxy:-1,tnx:-.8,vx:.4},
+   topics:["gold","real rates","safe haven","central bank"],
+   tip:"Where money goes when people want somewhere safe.",
+   why:"The one here that often likes fear. Rising real yields are its enemy."},
+
+  {k:"eurusd", n:"EURUSD", lab:"Euro / dollar", kind:"fx", ccy:"USD", px:1.148, vol:.0015, d:4, pt:125000,
+   opt:null, bench:null,
+   drivers:{dxy:-1,tnx:-.3},
+   topics:["ecb","euro","dollar","fed","europe"],
+   tip:"How many dollars one euro buys.",
+   why:"The dollar's mirror. The gap between European and US rates drives it."},
+
+  {k:"usdjpy", n:"USDJPY", lab:"Dollar / yen", kind:"fx", ccy:"JPY", px:156.7, vol:.25, d:3, pt:125000,
+   opt:null, bench:null,
+   drivers:{tnx:1,vx:-.6},
+   topics:["boj","yen","carry trade","intervention","japan"],
+   tip:"How many yen one dollar buys. Up means a weaker yen.",
+   why:"Tracks the US–Japan rate gap, and falls hard when borrowed-yen trades unwind."},
+
+  {k:"btc", n:"BTC", lab:"Bitcoin", kind:"crypto", ccy:"USD", px:80900, vol:400, d:0, pt:1,
+   opt:"IBIT", bench:null,
+   drivers:{dxy:-.8,vx:-1,tnx:-.5},
+   topics:["bitcoin","crypto","etf","regulation","halving"],
+   tip:"The largest cryptocurrency.",
+   why:"Trades as the bravest end of risk appetite, and never closes."},
+
+  {k:"eth", n:"ETH", lab:"Ethereum", kind:"crypto", ccy:"USD", px:2600, vol:25, d:2, pt:1,
+   opt:"ETHA", bench:"btc",
+   drivers:{dxy:-.8,vx:-1,tnx:-.5},
+   topics:["ethereum","crypto","etf","staking"],
+   tip:"The second largest cryptocurrency.",
+   why:"Follows bitcoin, with more torque in both directions."},
+
+  {k:"sol", n:"SOL", lab:"Solana", kind:"crypto", ccy:"USD", px:112, vol:2.5, d:2, pt:1,
+   opt:null, bench:"btc",
+   drivers:{dxy:-.6,vx:-1.2},
+   topics:["solana","crypto","altcoin"],
+   tip:"A smaller, faster-moving cryptocurrency.",
+   why:"Higher beta again, and thin enough that one headline can move it."},
+
+  {k:"nvda", n:"NVDA", lab:"Nvidia", kind:"stock", ccy:"USD", px:219.5, vol:2.2, d:2, pt:100,
+   opt:"NVDA", bench:"nq",
+   drivers:{tnx:-.6,vx:-1},
+   topics:["nvidia","ai","chip","semiconductor","data center","export control"],
+   tip:"The chip company at the centre of the AI trade.",
+   why:"The single biggest one-company influence on the Nasdaq."},
+
+  {k:"aapl", n:"AAPL", lab:"Apple", kind:"stock", ccy:"USD", px:335, vol:2.4, d:2, pt:100,
+   opt:"AAPL", bench:"nq",
+   drivers:{tnx:-.5,dxy:-.4,vx:-.9},
+   topics:["apple","iphone","china","services"],
+   tip:"The iPhone maker.",
+   why:"Sells heavily abroad, so the dollar and China both reach it."},
+
+  {k:"msft", n:"MSFT", lab:"Microsoft", kind:"stock", ccy:"USD", px:495, vol:3.4, d:2, pt:100,
+   opt:"MSFT", bench:"nq",
+   drivers:{tnx:-.6,vx:-.9},
+   topics:["microsoft","azure","ai","cloud","openai"],
+   tip:"Windows, Office and the Azure cloud.",
+   why:"Cloud and AI spending are the lines that move it."},
+
+  {k:"tsla", n:"TSLA", lab:"Tesla", kind:"stock", ccy:"USD", px:363, vol:6, d:2, pt:100,
+   opt:"TSLA", bench:"nq",
+   drivers:{tnx:-.8,vx:-1.3},
+   topics:["tesla","ev","robotaxi","musk","deliveries"],
+   tip:"The electric car maker.",
+   why:"The most headline-driven of the giants, and the fastest moving."},
 ];
-const market={live:false,stamp:null,q:{}};
+
+/* Context series: never traded here, but they are what moves everything else. */
+const SERIES=[
+  {k:"vx",  n:"VIX",   lab:"Fear gauge",      px:15.5,  vol:.10,  d:2, inv:true,
+   tip:"How much turbulence traders expect over the next month. High means nervous."},
+  {k:"tnx", n:"US10Y", lab:"Borrowing rate",  px:5.0,   vol:.014, d:3, inv:true,
+   tip:"What it costs the US government to borrow for ten years."},
+  {k:"dxy", n:"DXY",   lab:"US dollar",       px:100.2, vol:.09,  d:2, inv:true,
+   tip:"The dollar against other big currencies."},
+];
+
+const byK=k=>INSTR.find(i=>i.k===k)||INSTR[0];
+const cur=()=>byK(state.cfg.market);
+/* Quote rows to seed: every instrument, plus the series that are not already
+   instruments in their own right. */
+const QUOTE_ROWS=()=>INSTR.concat(SERIES.filter(x=>!INSTR.some(i=>i.k===x.k)));
+
+const market={live:false,stamp:null,q:{},levels:{},allLevels:{},options:{}};
+
+function seedLevels(px,tick){
+  const r=v=>Math.round(v/tick)*tick;
+  return {onh:r(px*1.0042), onl:r(px*0.9963), pdh:r(px*1.0071), pdl:r(px*0.9924),
+          pdc:r(px*1.0008), vwap:r(px*0.9996), ibh:r(px*1.0026), ibl:r(px*0.9979)};
+}
 function seedMarket(ref){
-  const scale=ref?ref/29700:1;
-  for(const s of SYMS){
-    const base=s.k==="nq"?(ref||s.px):(s.k==="es"?Math.round(s.px*scale*100)/100:s.px);
+  const c=cur();
+  for(const s of QUOTE_ROWS()){
+    const base=s.k===c.k?(ref||s.px):s.px;
     market.q[s.k]={...s,px:base,open:base,last:base,chg:0,pct:0,hi:base,lo:base};
   }
-  const nq=market.q.nq.px;
-  market.levels={
-    onh:Math.round((nq*1.0042)/.25)*.25, onl:Math.round((nq*0.9963)/.25)*.25,
-    pdh:Math.round((nq*1.0071)/.25)*.25, pdl:Math.round((nq*0.9924)/.25)*.25,
-    pdc:Math.round((nq*1.0008)/.25)*.25, vwap:Math.round((nq*0.9996)/.25)*.25,
-    ibh:Math.round((nq*1.0026)/.25)*.25, ibl:Math.round((nq*0.9979)/.25)*.25
-  };
+  market.allLevels={};
+  for(const i of INSTR){
+    const q=market.q[i.k];
+    if(q) market.allLevels[i.k]=seedLevels(q.last,Math.pow(10,-i.d)||0.01);
+  }
+  market.levels=market.allLevels[c.k];
 }
 function tickMarket(){
   if(market.live) return;
   for(const k in market.q){
     const q=market.q[k];
-    const drift=(Math.random()-.5)*q.vol;
-    q.last=Math.max(q.vol,q.last+drift);
-    q.chg=q.last-q.open; q.pct=q.chg/q.open*100;
+    q.last=Math.max(q.vol,q.last+(Math.random()-.5)*q.vol);
+    q.chg=q.last-q.open; q.pct=q.open?q.chg/q.open*100:0;
     q.hi=Math.max(q.hi,q.last); q.lo=Math.min(q.lo,q.last);
   }
   const v=market.q.vx; if(v) v.last=clamp(v.last,9,80);
@@ -839,8 +982,9 @@ const SRC_TIER={Reuters:1,Bloomberg:1,WSJ:1,FT:1,CNBC:.85,MarketWatch:.8,"Federa
    STATE
    ===================================================================== */
 const DEFAULTS={
-  session:"night", regime:"growth", ref:29700, riskPerTrade:500, instrument:"NQ",
-  stopPts:28, minScore:35, minConf:45
+  session:"night", regime:"growth", ref:29700, riskPerTrade:500,
+  market:"nq", micro:false, stopPct:0.1,
+  minScore:35, minConf:45
 };
 const state={
   cfg:{...DEFAULTS},
@@ -871,7 +1015,7 @@ function rescoreWire(){
    ===================================================================== */
 const HALFLIFE=45;                                    /* minutes */
 function tapeStats(windowMin,filterFn){
-  const now=Date.now(); let num=0,den=0,n=0,top=null;
+  const now=Date.now(); let num=0,den=0,n=0,scored=0,top=null;
   for(const w of state.wire){
     const age=(now-w.ts)/60000; if(age>windowMin) continue;
     if(filterFn&&!filterFn(w)) continue;
@@ -879,10 +1023,10 @@ function tapeStats(windowMin,filterFn){
     const tier=SRC_TIER[w.src]||SRC_TIER.Other;
     const imp=w.impact===3?1.6:w.impact===2?1.15:.8;
     const wt=decay*tier*imp;
-    num+=w.score*wt; den+=wt; n++;
+    num+=w.score*wt; den+=wt; n++; if(w.score!==0) scored++;
     if(!top||Math.abs(w.score)*decay>Math.abs(top.score)*Math.pow(.5,((now-top.ts)/60000)/HALFLIFE)) top=w;
   }
-  return {mean:den?num/den:0,n,top,weight:den};
+  return {mean:den?num/den:0,n,scored,top,weight:den};
 }
 function nextTier3(){
   const cal=calendar(3);
@@ -893,16 +1037,68 @@ function nextTier3(){
   }
   return null;
 }
-function computeSignal(){
-  const t=et(), sess=sessionOf(t), q=market.q, L=market.levels, F=[];
-  const nq=q.nq.last;
+/* How hard a 1% move in each series pushes, before the instrument's own sign
+   and weight are applied. The fear gauge swings far more than a bond yield, so
+   it needs a much smaller multiplier to matter the same amount. */
+const DRIVER_SCALE={tnx:22,dxy:30,usdjpy:14,eur:14,vx:3.6};
+const DRIVER_NAME={tnx:"the US borrowing rate",dxy:"the US dollar",vx:"the fear gauge",
+                   usdjpy:"the yen (up = weaker yen)",eur:"the euro"};
+const RATE_KEYS=["tnx","dxy","usdjpy","eur"], MOOD_KEYS=["vx"];
 
-  /* 1 — what the news is saying */
-  const tape=tapeStats(240);
-  F.push({id:"tape",name:"What the news is saying",w:.24,
+/* Sum the instrument's drivers that fall in `keys`. Returns null when this
+   market has none of them, so the factor can be dropped rather than shown as a
+   confident zero. */
+function driverPush(I,keys){
+  let sc=0; const parts=[];
+  for(const [k,sign] of Object.entries(I.drivers||{})){
+    if(!keys.includes(k)) continue;
+    const ser=market.q[k]; if(!ser) continue;
+    sc+=sign*ser.pct*(DRIVER_SCALE[k]||10);
+    parts.push(DRIVER_NAME[k]+" "+sgn(ser.pct)+"%"+(sign>0?" (helps)":" (hurts)"));
+  }
+  return parts.length?{score:Math.round(clamp(sc,-100,100)),parts}:null;
+}
+
+/* Does this story plausibly touch this market? Topic words, or a tagged company
+   that is either this instrument or one of the giants inside it. */
+function touches(w,I){
+  const t=(w.txt||"").toLowerCase();
+  if(I.topics&&I.topics.some(x=>t.includes(x))) return true;
+  if(w.entity&&I.kind==="stock") return w.entity.toLowerCase()===I.k;
+  if(w.entity&&(I.kind==="future")) return true;
+  return false;
+}
+
+/* The at-the-money straddle is what the option market charges to be wrong
+   about direction, so it IS the move being paid for between now and expiry.
+   Comparing it with what has already happened answers the one question options
+   answer cheaply: is this news already in the price? */
+function optionsFor(I){
+  const o=I.opt&&market.options?market.options[I.opt]:null;
+  return o&&Number.isFinite(o.expectedMovePct)?o:null;
+}
+
+function computeSignal(){
+  const t=et(), sess=sessionOf(t), q=market.q, F=[];
+  const I=cur();
+  const L=market.allLevels[I.k]||market.levels||{};
+  const nq=(q[I.k]||q.nq).last;
+
+  /* 1 — what the news is saying, about THIS market, and only as loudly as it
+     actually managed to read. Most headlines match no pattern at all; counting
+     that silence as "neutral" let this input speak with far more authority than
+     it had earned, so its weight now scales with how much of the wire it could
+     actually score. */
+  const tape=tapeStats(240,w=>touches(w,I));
+  const cover=tape.n?tape.scored/tape.n:0;
+  const tapeW=Math.round(.24*clamp(cover*2,.12,1)*1000)/1000;
+  F.push({id:"tape",name:"What the news is saying",w:tapeW,
     score:Math.round(clamp(tape.mean*1.2,-100,100)),
-    note:tape.n?tape.n+" stories in the last four hours, the newest counting for most · loudest: "+
-         (tape.top?tape.top.txt.slice(0,58)+"…":"—"):"Nothing has come in over the last four hours"});
+    note:tape.n
+      ?tape.n+" stories about "+I.lab+" in four hours, "+tape.scored+" of them with a reading"+
+       (cover<.5?" — so this counts for less than usual":"")+
+       (tape.top?" · loudest: "+tape.top.txt.slice(0,52)+"…":"")
+      :"Nothing about "+I.lab+" has come in over the last four hours"});
 
   /* 2 — catalyst posture */
   const nx=nextTier3(); let cScore=0,cNote="Nothing major is due any time soon";
@@ -916,18 +1112,23 @@ function computeSignal(){
   }
   F.push({id:"cat",name:"Big announcements due",w:.16,score:cScore,note:cNote});
 
-  /* 3 — interest rates and the dollar (this index usually falls when either rises) */
-  const rd=clamp(-(q.tnx.pct*20+q.dxy.pct*26),-100,100);
-  F.push({id:"rates",name:"Interest rates and the dollar",w:.18,score:Math.round(rd),
-    note:"Government borrowing rate "+sgn(q.tnx.pct)+"% · US dollar "+sgn(q.dxy.pct)+
-         "% — when either of these goes up, tech shares usually go down"});
+  /* 3 — rates and currencies, whichever of them move THIS market */
+  const rates=driverPush(I,RATE_KEYS);
+  if(rates) F.push({id:"rates",name:"Interest rates and currencies",w:.18,score:rates.score,
+    note:rates.parts.join(" · ")+" — "+I.why});
 
-  /* 4 — risk appetite */
-  const lead=q.nq.pct-q.es.pct;
-  const ra=clamp(-q.vx.pct*3.6+lead*38,-100,100);
-  F.push({id:"risk",name:"How brave the market feels",w:.18,score:Math.round(ra),
-    note:"Fear gauge at "+fmt(q.vx.last,2)+" ("+sgn(q.vx.pct)+"%) · tech is "+(lead>=0?"ahead of":"behind")+
-         " the wider US market by "+fmt(Math.abs(lead),2)+"% today"});
+  /* 4 — how brave the market feels, plus how this one is doing against the
+     market it usually travels with */
+  const mood=driverPush(I,MOOD_KEYS);
+  const bq=I.bench?q[I.bench]:null, bi=I.bench?byK(I.bench):null;
+  const lead=bq?q[I.k].pct-bq.pct:0;
+  if(mood||bq){
+    const ra=clamp((mood?mood.score:0)+lead*38,-100,100);
+    F.push({id:"risk",name:"How brave the market feels",w:.18,score:Math.round(ra),
+      note:[mood?"Fear gauge at "+fmt(q.vx.last,2)+" ("+sgn(q.vx.pct)+"%)":null,
+            bq?I.lab+" is "+(lead>=0?"ahead of":"behind")+" "+bi.lab+" by "+fmt(Math.abs(lead),2)+"% today":null]
+           .filter(Boolean).join(" · ")});
+  }
 
   /* 5 — session structure */
   let st=0, sn=[], haveLv=0;
@@ -946,14 +1147,23 @@ function computeSignal(){
   F.push({id:"struct",name:"Where the price sits today",w:.14,score:Math.round(clamp(st,-100,100)),
     note:sn.join(" · ")});
 
-  /* 6 — the handful of giant companies that dominate the index */
-  const mc=tapeStats(300,w=>!!w.entity);
-  let mcScore=Math.round(clamp(mc.mean*1.15,-100,100));
-  F.push({id:"mega",name:"The giant companies",w:.10,score:mcScore,
-    note:mc.n?mc.n+" stories about the giants · the seven biggest are roughly 45% of this whole index":
-              "No news about the biggest companies"});
+  /* 6 — company news: the giants for an index, this name for a single stock.
+     Currencies and commodities have no equivalent, so they simply omit it. */
+  if(I.giants||I.kind==="stock"){
+    const own=I.kind==="stock";
+    const mc=tapeStats(300,w=>own?(w.entity||"").toLowerCase()===I.k:!!w.entity);
+    F.push({id:"mega",name:own?("News about "+I.lab):"The giant companies",w:.10,
+      score:Math.round(clamp(mc.mean*1.15,-100,100)),
+      note:mc.n?(mc.n+" stor"+(mc.n===1?"y":"ies")+(own?" about "+I.lab
+                 :" about the giants · the seven biggest are roughly 45% of this index"))
+               :(own?"No news about "+I.lab+" in the last five hours":"No news about the biggest companies")});
+  }
 
-  /* composite */
+  /* Factors can be dropped (a currency has no company news) or scaled down (the
+     news factor when it read almost nothing), so re-spread the weights to sum
+     to one. Otherwise dropping an input would quietly shrink every score. */
+  const wSum=F.reduce((a,f)=>a+f.w,0)||1;
+  for(const f of F) f.w=f.w/wSum;
   const composite=Math.round(F.reduce((a,f)=>a+f.score*f.w,0));
 
   /* how sure we are: do the six inputs agree, is anyone trading, is the news fresh */
@@ -973,6 +1183,21 @@ function computeSignal(){
     gates.push({t:"Everyone is waiting for the news",d:nx.ev.name+" in "+dur(nx.mins)+". Prices go quiet before a big number, and moves that start in this gap usually fizzle out."});
   if(sess.id==="lunch"&&Math.abs(composite)<35)
     gates.push({t:"Lunchtime drift",d:"It is the middle of the New York day and nothing in the news points either way. Prices are more likely to wander back than to run."});
+  /* Chasing a move that has already travelled further than the options market
+     priced for the whole session is the most expensive habit this tool can
+     talk someone out of. */
+  const opt=optionsFor(I);
+  const dayMove=Math.abs((q[I.k]||{}).pct||0);
+  const pricedToday=opt&&opt.today?opt.today.expectedMovePct:null;
+  /* Compare the day's move against the FORWARD expiry, never against the one
+     expiring today: that one prices only the minutes still left, so it decays
+     toward zero through the afternoon and would make this fire every day. */
+  if(opt&&dayMove>opt.expectedMovePct)
+    gates.push({t:"It has already moved more than was priced in",
+      d:I.lab+" is "+fmt(dayMove,2)+"% on the day, and the options market prices only about "+
+        fmt(opt.expectedMovePct,2)+"% of movement between now and "+opt.expiry+", "+opt.days+
+        " days out. A day that has already covered the next few days of expected range is a late "+
+        "place to join in."});
   if(conf<30) gates.push({t:"We are not confident",d:"The six inputs disagree with each other, or the news we have is too old to lean on."});
 
   /* the verdict, in words rather than trading shorthand. `blurb` is the plain
@@ -999,13 +1224,19 @@ function computeSignal(){
   if(tier>1&&conf<state.cfg.minConf) setTier(1);
 
   /* sizing */
-  const mult=state.cfg.instrument==="MNQ"?2:20;
-  const stop=state.cfg.stopPts;
+  /* A "point" is not comparable across these markets - 28 of them is a normal
+     stop on the Nasdaq and an enormous one on the euro - so the stop is held as
+     a percentage of price and turned into points for whichever market is up. */
+  const useMicro=state.cfg.micro&&I.micro;
+  const mult=useMicro?I.micro.pt:I.pt;
+  const tick=Math.pow(10,-I.d);
+  const stop=Math.max(tick,Math.round((nq*state.cfg.stopPct/100)/tick)*tick);
   const sizeRaw=state.cfg.riskPerTrade/(stop*mult);
   const size=tier===0?0:Math.max(0,Math.floor(sizeRaw*(tier===1?.34:tier===2?.67:1)));
 
   return {t,sess,factors:F,composite,conf,gates,tier,label,blurb,dir,size,stop,mult,
-          next:nx,tape,contract:frontMonth(t)};
+          instr:I,px:nq,useMicro,cover,opt,dayMove,pricedToday,
+          next:nx,tape,contract:I.kind==="future"?frontMonth(t,I):I.n};
 }
 
 /* =====================================================================
@@ -1363,7 +1594,11 @@ function renderAll(){ for(const id in wins){ if(visible(wins[id])) renderApp(id)
 
 /* "NQ" and "MNQ" are the codes on a broker's screen; on ours they get their
    plain names, because nobody new to this knows what an M in front means. */
-const contractName=(k,n)=>(k==="MNQ"?"micro contract":"standard contract")+(n===1?"":"s");
+const contractName=(I,micro,n)=>{
+  const one=I.kind==="stock"?"lot of 100 shares":I.kind==="crypto"?"coin":
+            I.kind==="fx"?"lot":(micro?"micro contract":"contract");
+  return one+(n===1?"":"s");
+};
 
 /* ------------------------------------------------------------ VERDICT */
 R.signal=function(b){
@@ -1403,12 +1638,12 @@ R.signal=function(b){
      '<div class="rowsplit"><span>The contract</span><b class="mono" title="The code for the Nasdaq-100 futures contract being traded at the moment. The letter and digit say which month it runs to, and it changes four times a year.">'+
        esc(s.contract)+'</b></div>'+
      '<div class="rowsplit"><span>How much to buy or sell</span><b class="mono">'+
-       (s.size ? s.size+" "+contractName(state.cfg.instrument,s.size)
+       (s.size ? s.size+" "+contractName(s.instr,s.useMicro,s.size)
                : s.tier===0 ? "nothing — sit it out"
                /* A real answer beats "sit it out" when the reading is fine and it is
                   the risk limit that cannot stretch to a single contract. */
                : "none — one would risk $"+fmt(s.stop*mult,0)+", over your limit")+'</b></div>'+
-     '<div class="rowsplit"><span>Give up and get out after</span><b class="mono">'+s.stop+' points · $'+fmt(s.stop*mult,0)+' each</b></div>'+
+     '<div class="rowsplit"><span>Give up and get out after</span><b class="mono">'+fmt(s.stop,s.instr.d)+' points ('+state.cfg.stopPct+'%) · $'+fmt(s.stop*mult,0)+' each</b></div>'+
      '<div class="rowsplit"><span>Money you would be risking</span><b class="mono">$'+fmt(s.size*s.stop*mult,0)+' of your $'+fmt(risk,0)+' limit</b></div>'+
      '<div class="rowsplit"><span>First place to take a profit</span><b class="mono">'+Math.round(s.stop*1.5)+' points</b></div>'+
      '</div>'+
@@ -1542,23 +1777,30 @@ R.cat=function(b){
 
 /* --------------------------------------------------------------- TAPE */
 R.tape=function(b){
-  const q=market.q,L=market.levels,nq=q.nq.last;
+  const I=cur(), q=market.q, L=market.allLevels[I.k]||{}, nq=q[I.k].last;
   let h='<div class="qgrid">';
-  for(const s of SYMS){
+  for(const s of QUOTE_ROWS()){
     const x=q[s.k], good=s.inv?-x.pct:x.pct;
-    h+='<div class="q" title="'+esc(s.lab+" ("+s.n+"). "+s.tip+(s.inv?" It usually moves in the opposite direction to the Nasdaq 100.":""))+'">'+
-       '<div class="s"><span>'+esc(s.lab)+'</span>'+(s.inv?'<span>opposite</span>':'')+'</div>'+
+    const opp=(I.drivers||{})[s.k]!=null?((I.drivers[s.k]<0)!==false):s.inv;
+    h+='<div class="q" title="'+esc(s.lab+" ("+s.n+"). "+s.tip+
+        (opp&&s.k!==I.k?" When this goes up, "+I.lab+" usually goes down.":""))+'">'+
+       '<div class="s"><span>'+esc(s.lab)+'</span>'+(opp&&s.k!==I.k?'<span>opposite</span>':'')+'</div>'+
        '<div class="p">'+fmt(x.last,s.d)+'</div>'+
        '<div class="c '+cls(good)+'">'+sgn(x.chg)+' &#183; '+sgn(x.pct)+'%</div></div>';
   }
-  const spread=market.q.nq.pct-market.q.es.pct;
-  h+='<div class="q" title="How the Nasdaq 100 is doing today compared with the wider US market">'+
-     '<div class="s"><span>Tech vs market</span></div>'+
-     '<div class="p '+cls(spread)+'">'+sgn(spread)+'%</div>'+
-     '<div class="c" style="color:var(--ink-3)">'+(spread>=0?'tech ahead':'tech behind')+'</div></div>';
+  /* Only worth a tile when this market has a partner it normally travels with -
+     the Nikkei and gold have none, and an empty 0.00% reads like information. */
+  const bi=I.bench?byK(I.bench):null;
+  if(bi){
+    const spread=q[I.k].pct-q[I.bench].pct;
+    h+='<div class="q" title="'+esc("How "+I.lab+" is doing today compared with "+bi.lab)+'">'+
+       '<div class="s"><span>'+esc(I.n+" vs "+bi.n)+'</span></div>'+
+       '<div class="p '+cls(spread)+'">'+sgn(spread)+'%</div>'+
+       '<div class="c" style="color:var(--ink-3)">'+(spread>=0?esc(I.n)+' ahead':esc(I.n)+' behind')+'</div></div>';
+  }
   h+='</div>';
-  h+='<div class="note" style="margin-top:6px">Green is good for the Nasdaq 100, red is bad. The three marked '+
-     '<b>opposite</b> work the other way round: when they go up, this index usually goes down. Hover or tap any '+
+  h+='<div class="note" style="margin-top:6px">Green is good for '+esc(I.lab)+', red is bad. The tiles marked '+
+     '<b>opposite</b> work the other way round: when they go up, '+esc(I.lab)+' usually goes down. Hover or tap any '+
      'tile to see what it is.</div>';
 
   /* The prices traders watch, named the way you would say them rather than by
@@ -1573,6 +1815,27 @@ R.tape=function(b){
   const raw=[Math.min(...vals),Math.max(...vals)], padv=Math.max((raw[1]-raw[0])*0.12,raw[1]*0.0006);
   const hi=raw[1]+padv, lo=raw[0]-padv, rng=hi-lo||1;
   const pos=v=>((hi-v)/rng*100);
+  const oo=optionsFor(I);
+  if(oo){
+    const dm=Math.abs(q[I.k].pct||0), t0=oo.today?oo.today.expectedMovePct:null;
+    h+='<hr class="sep"><div class="lab">What the options market is paying for</div>'+
+      '<div class="panel" style="margin-top:6px">'+
+      '<div class="rowsplit"><span>Expected move by '+esc(oo.expiry)+' ('+oo.days+' days)</span>'+
+        '<b class="mono">\u00b1'+fmt(oo.expectedMovePct,2)+'%</b></div>'+
+      (t0!=null?'<div class="rowsplit"><span>Still priced for the rest of today</span><b class="mono">\u00b1'+
+        fmt(t0,2)+'%</b></div>':'')+
+      '<div class="rowsplit"><span>Moved so far today</span><b class="mono'+
+        (dm>oo.expectedMovePct?" down":"")+'">'+fmt(dm,2)+'%</b></div>'+
+      '<div class="rowsplit"><span>Which side costs more to bet on</span><b class="mono">'+
+        (oo.skew>0.02?"falling":oo.skew<-0.02?"rising":"about level")+'</b></div>'+
+      '</div>'+
+      '<div class="note" style="margin-top:6px">Taken from the '+esc(oo.symbol)+' option chain. '+
+      'The first number is what it costs to bet on a move in either direction \u2014 the market\u2019s own '+
+      'estimate of how far this can travel by then. If price has already gone further than that, '+
+      'most of the move has happened and you would be paying up to join it late. The '+
+      '\u201crest of today\u201d figure shrinks as the session runs out, so it is worth reading on its own '+
+      'rather than against a whole day\u2019s move.</div>';
+  }
   h+='<hr class="sep"><div class="lab">Prices worth watching today</div>'+
      '<div class="note" style="margin-top:3px;margin-bottom:2px">Prices often stall or turn around at yesterday\'s '+
      'high and low, at the overnight range, and at the day\'s average price. The orange line is where it is trading now.</div>'+
@@ -1604,29 +1867,30 @@ R.tape=function(b){
 
 /* ----------------------------------------------------------- PLAYBOOK */
 function setups(){
-  const s=state.signal, q=market.q, L=market.levels, t=s.t, nq=q.nq.last, m=t.min;
+  const s=state.signal, q=market.q, I=cur(), L=market.allLevels[I.k]||{}, t=s.t, nq=q[I.k].last, m=t.min;
   const nx=s.next, minsTo=nx?nx.mins:9999;
   const C=(ok,txt)=>({ok:!!ok,txt});
   return [
   {n:"The opening push",
    d:"Whichever way the market goes in the first fifteen minutes tends to set the tone for the day. The idea is to go with it rather than argue with it.",
    c:[C(m>=570&&m<585,"It is between 9:30 and 9:45 in the morning, New York time"),
-      C(Math.abs(q.nq.pct)>.35,"The index has already moved more than a third of a per cent today"),
+      C(Math.abs(q[I.k].pct)>.35,I.lab+" has already moved more than a third of a per cent today"),
       C((nq>L.vwap&&s.composite>0)||(nq<L.vwap&&s.composite<0),"The price and our score point the same way"),
       C(Math.abs(s.composite)>30,"Our score is stronger than 30, up or down")],
    x:"Drop it if the price slips back past today's average price and stays there for five minutes."},
   {n:"Betting against the first spike",
    d:"The jump straight after a big announcement is mostly automatic order-filling, not people making up their minds. When the news itself points the other way, that first jump is often given back.",
    c:[C(minsTo<=0&&minsTo>-45,"A market-moving announcement landed less than 45 minutes ago"),
-      C(Math.abs(q.nq.pct)>.5,"The index has already travelled more than half a per cent"),
-      C(Math.sign(s.factors[0].score)!==Math.sign(q.nq.pct)&&Math.abs(s.factors[0].score)>20,
+      C(Math.abs(q[I.k].pct)>.5,I.lab+" has already travelled more than half a per cent"),
+      C(Math.sign(s.factors[0].score)!==Math.sign(q[I.k].pct)&&Math.abs(s.factors[0].score)>20,
         "The news itself points the opposite way to the price move"),
       C(s.conf>40,"The tool is more than 40% sure of its reading")],
    x:"Drop it if the price pushes back through the extreme it hit just after the announcement."},
   {n:"One giant company dragging the index",
    d:"The seven largest companies are roughly 45% of this index, so news about one of them moves the Nasdaq far more than it moves the wider US market. The gap between the two is the cleaner thing to bet on.",
    c:[C(Math.abs(s.factors[5].score)>35,"A story about one of the giants is scoring beyond 35, up or down"),
-      C(Math.abs(q.nq.pct-q.es.pct)>.15,"The Nasdaq is out of step with the wider market by more than 0.15%"),
+      C(!!I.bench&&Math.abs(q[I.k].pct-q[I.bench].pct)>.15,
+        I.bench?(I.lab+" is out of step with "+byK(I.bench).lab+" by more than 0.15%"):"no partner market to compare against"),
       C(m>=570&&m<960,"US shares are open for trading")],
    x:"Drop it once the Nasdaq and the wider market are back in line with each other."},
   {n:"The slow climb after a friendly central bank",
@@ -1770,7 +2034,7 @@ const ASKS={
 const briefCfg={ask:"read",custom:"",wire:12,cal:true,play:true,jrnl:true,method:false};
 
 function buildPrompt(){
-  const s=state.signal, q=market.q, L=market.levels, c=state.cfg, P=[], nq=q.nq.last;
+  const s=state.signal, q=market.q, I=cur(), L=market.allLevels[I.k]||{}, c=state.cfg, P=[], nq=q[I.k].last;
   const push=(...x)=>P.push(...x);
   /* "211 points above the price" beats "-211" for anyone reading this cold. */
   const dist=v=>fmt(Math.abs(nq-v),0)+" points "+(nq<v?"above":"below")+" the current price";
@@ -1815,8 +2079,9 @@ function buildPrompt(){
     push("- "+x.lab+" ("+x.n+") "+fmt(x.last,x.d)+"  ("+sgn(x.chg)+", "+sgn(x.pct)+"%)"+
          (x.inv?"  [this one usually moves opposite to the Nasdaq]":""));
   }
-  push("- Nasdaq against the wider US market: "+sgn(q.nq.pct-q.es.pct)+"% ("+
-       (q.nq.pct>=q.es.pct?"tech ahead":"tech behind")+")","");
+  if(I.bench) push("- "+I.lab+" against "+byK(I.bench).lab+": "+sgn(q[I.k].pct-q[I.bench].pct)+"% ("+
+       (q[I.k].pct>=q[I.bench].pct?"ahead":"behind")+")");
+  push("");
 
   push("## Prices worth watching, and how far today's "+fmt(nq,2)+" is from each");
   for(const [n,v] of [["Yesterday's high",L.pdh],["Overnight high",L.onh],["First-hour high",L.ibh],
@@ -1873,10 +2138,9 @@ function buildPrompt(){
        "- How I have told it to read the economy: "+(c.regime==="inverse"
           ? "inflation is the worry, so strong economic news is BAD for share prices"
           : "growth is what matters, so strong economic news is GOOD for share prices"),
-       "- Contract size: the "+(c.instrument==="MNQ"?"smaller 'micro'":"standard")+" one ("+c.instrument+
-         "), where one point of movement is $"+(c.instrument==="MNQ"?2:20),
-       "- Most I will risk on one trade: $"+fmt(c.riskPerTrade,0)+" \u00b7 I get out if it goes "+c.stopPts+
-         " points against me \u00b7 that works out at "+(s.size||0)+" "+contractName(c.instrument,s.size),
+       "- Market: "+s.instr.lab+" ("+s.instr.n+"), one point of movement is $"+s.mult,
+       "- Most I will risk on one trade: $"+fmt(c.riskPerTrade,0)+" \u00b7 I get out if it goes "+fmt(s.stop,I.d)+
+         " points against me \u00b7 that works out at "+(s.size||0)+" "+contractName(s.instr,s.useMicro,s.size),
        "- I only consider a trade when the score is stronger than "+c.minScore+" and the tool is at least "+
          c.minConf+"% sure","");
 
@@ -1980,13 +2244,19 @@ R.set=function(b){
     '<input type="number" id="s-ref" value="'+c.ref+'" step="1">',
     "Only used while the prices are made up. Put in roughly where the Nasdaq-100 is actually trading, so that the "+
     "practice numbers look believable and the rest of the tool has something sensible to work with.");
-  h+=row("Which contract you trade",
-    '<select id="s-inst"><option value="NQ"'+(c.instrument==="NQ"?" selected":"")+'>Standard — one point is worth $20</option>'+
-    '<option value="MNQ"'+(c.instrument==="MNQ"?" selected":"")+'>Smaller (micro) — one point is worth $2</option></select>',
-    "The smaller contract behaves exactly the same way; it just moves a tenth as much money.");
+  const CI=cur();
+  h+=row("Market",
+    '<select id="s-mkt">'+INSTR.map(i=>'<option value="'+i.k+'"'+(c.market===i.k?" selected":"")+'>'+
+      esc(i.lab+" ("+i.n+")")+'</option>').join("")+'</select>',
+    CI.why);
+  if(CI.micro)
+    h+=row("Which contract size",
+      '<select id="s-micro"><option value="0"'+(!c.micro?" selected":"")+'>Standard \u2014 one point is $'+CI.pt+'</option>'+
+      '<option value="1"'+(c.micro?" selected":"")+'>Smaller (micro) \u2014 one point is $'+CI.micro.pt+'</option></select>',
+      "The smaller contract behaves exactly the same way; it just moves less money.");
   h+='<div class="g2" style="gap:9px">'+
     row("Most you would risk on one trade ($)",'<input type="number" id="s-risk" value="'+c.riskPerTrade+'" step="50">')+
-    row("Get out if it moves this far against you (points)",'<input type="number" id="s-stop" value="'+c.stopPts+'" step="1">')+
+    row("Get out if it moves this far against you (%)",'<input type="number" id="s-stop" value="'+c.stopPct+'" step="0.01">')+
     row("Score you need before considering a trade",'<input type="number" id="s-ms" value="'+c.minScore+'" step="1">')+
     row("How sure the tool has to be (%)",'<input type="number" id="s-mc" value="'+c.minConf+'" step="1">')+'</div>';
   h+='<div class="note" style="margin:-4px 0 10px">The first two work out how many contracts the tool suggests: your '+
@@ -2053,9 +2323,13 @@ R.set=function(b){
   b.innerHTML=h;
   $("#s-save",b).onclick=async()=>{
     c.session=$("#s-sess",b).value; c.regime=$("#s-reg",b).value;
-    c.ref=+$("#s-ref",b).value||DEFAULTS.ref; c.instrument=$("#s-inst",b).value;
+    c.ref=+$("#s-ref",b).value||DEFAULTS.ref;
+    const prevMkt=c.market;
+    c.market=$("#s-mkt",b).value||DEFAULTS.market;
+    if($("#s-micro",b)) c.micro=$("#s-micro",b).value==="1";
+    if(c.market!==prevMkt&&!market.live) seedMarket(market.q[c.market]?market.q[c.market].last:cur().px);
     c.riskPerTrade=+$("#s-risk",b).value||DEFAULTS.riskPerTrade;
-    c.stopPts=Math.max(4,+$("#s-stop",b).value||DEFAULTS.stopPts);
+    c.stopPct=clamp(+$("#s-stop",b).value||DEFAULTS.stopPct,0.01,10);
     c.minScore=clamp(+$("#s-ms",b).value||DEFAULTS.minScore,5,95);
     c.minConf=clamp(+$("#s-mc",b).value||DEFAULTS.minConf,0,95);
     applyTheme(); if(!market.live) seedMarket(c.ref); rescoreWire();
@@ -2083,9 +2357,49 @@ function applyTheme(){ document.documentElement.setAttribute("data-session",stat
 /* =====================================================================
    SHELL CHROME
    ===================================================================== */
-const TICK_SYMS=["nq","es","vx","tnx","dxy"];
+/* The market being read, then whatever it travels with, then the series that
+   push it - so the strip explains the score rather than always showing tech. */
+const tickKeys=()=>{
+  const I=cur(), out=[I.k];
+  if(I.bench) out.push(I.bench);
+  for(const k of Object.keys(I.drivers||{})) if(!out.includes(k)) out.push(k);
+  return out.slice(0,5);
+};
+let mktPickBuilt=false;
+function paintMarketPicker(){
+  const sel=$("#mktpick"); if(!sel) return;
+  if(!mktPickBuilt){
+    const groups={future:"Futures",fx:"Currencies",crypto:"Crypto",stock:"Shares"};
+    let h="";
+    for(const kind of ["future","fx","crypto","stock"]){
+      h+='<optgroup label="'+groups[kind]+'">';
+      for(const i of INSTR.filter(x=>x.kind===kind))
+        h+='<option value="'+i.k+'">'+esc(i.lab)+'</option>';
+      h+='</optgroup>';
+    }
+    sel.innerHTML=h;
+    sel.onchange=()=>switchMarket(sel.value);
+    mktPickBuilt=true;
+  }
+  if(sel.value!==state.cfg.market) sel.value=state.cfg.market;
+}
+
+/* Changing market changes what every app is about, so rebuild rather than
+   patch: levels, the tick strip, the playbook and the prompt all key off it. */
+async function switchMarket(k){
+  if(!byK(k)||k===state.cfg.market) return;
+  state.cfg.market=k;
+  const I=cur();
+  if(!market.live) seedMarket(market.q[k]?market.q[k].last:I.px);
+  market.levels=market.allLevels[k]||market.levels;
+  state.signal=computeSignal();
+  paintChrome(); renderAll(); paintDock();
+  await saveCfg();
+}
+
 function paintChrome(){
   const s=state.signal;
+  paintMarketPicker();
   $("#clock").textContent=h12(s.t.min)+":"+pad(s.t.s)+" "+mer(s.t.min)+" NY";
   $("#sessionpill").textContent=s.sess.name;
   const lamp=$("#syslamp");
@@ -2096,7 +2410,7 @@ function paintChrome(){
   fp.title=market.live?"Real prices and headlines, pulled "+(market.stamp||""):
     "Made-up prices and example headlines, so you can try the tool out — see Settings for how to plug in real ones";
   let h="";
-  for(const k of TICK_SYMS){
+  for(const k of tickKeys()){
     const q=market.q[k], good=q.inv?-q.pct:q.pct;
     h+='<span class="tk" title="'+esc(q.lab+" ("+(k==="nq"?s.contract:q.n)+"). "+q.tip)+'">'+
        '<i>'+esc(q.lab)+'</i><b>'+fmt(q.last,q.d)+'</b>'+
@@ -2135,7 +2449,19 @@ function loadSnapshot(snap){
     }
     market.live=true; market.stamp=snap.stamp||new Date().toLocaleString();
   }
-  if(snap.levels){
+  if(snap.instrumentLevels){
+    /* Per-market levels. A level the feed could not compute is left absent
+       rather than filled in from the simulator. */
+    const keys=["onh","onl","pdh","pdl","pdc","ibh","ibl","vwap"];
+    for(const ik in snap.instrumentLevels){
+      const src=snap.instrumentLevels[ik]||{}, next={};
+      for(const k of keys) next[k]=Number.isFinite(src[k])?src[k]:null;
+      market.allLevels[ik]=next;
+    }
+    market.levels=market.allLevels[state.cfg.market]||market.levels;
+  }
+  if(snap.options&&typeof snap.options==="object") market.options=snap.options;
+  if(snap.levels&&!snap.instrumentLevels){
     /* A live feed that cannot compute a level (no RTH bars yet, so no VWAP and
        no initial balance) must leave it empty rather than fall back to what the
        simulator seeded - a real price measured against an invented VWAP is
@@ -2143,7 +2469,7 @@ function loadSnapshot(snap){
     const next={};
     for(const k of ["onh","onl","pdh","pdl","pdc","ibh","ibl","vwap"])
       next[k]=Number.isFinite(snap.levels[k])?snap.levels[k]:null;
-    market.levels=next;
+    market.levels=next; market.allLevels.nq=next;
   }
   if(Array.isArray(snap.headlines)&&snap.headlines.length){
     state.wire=state.wire.filter(w=>!w.demo);

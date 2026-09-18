@@ -107,7 +107,7 @@ export function levelsFrom(c) {
 /* A full option chain is a large download, so this list is deliberately short:
    the index proxies answer "is this move already priced?", and the two most
    headline-driven single names answer it for the megacaps. */
-export const OPTION_UNDERLYINGS = ["QQQ", "SPY", "NVDA", "TSLA"];
+export const OPTION_UNDERLYINGS = ["QQQ", "SPY", "IWM", "GLD", "NVDA", "TSLA", "MSFT", "AAPL"];
 
 const OCC = /^([A-Z]+)(\d{2})(\d{2})(\d{2})([CP])(\d{8})$/;
 
