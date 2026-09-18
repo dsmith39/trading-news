@@ -39,8 +39,9 @@ Live at **https://nq.nightowltradinggroup.com**.
 | `b8312ab` | A pull-request check, and deploy from `main` |
 | `1970e94` | `CLAUDE.md` — conventions and traps (PR #1) |
 | `2564253` | Plain English across every screen (PR #2, 594 lines) |
-| PR #3 | Keep an expanded News headline expanded — state held in the DOM was wiped by the two-second redraw |
-| PR #4 | This log, and the rule in `CLAUDE.md` to keep it updated |
+| `40941e3` | Keep an expanded News headline expanded — state held in the DOM was wiped by the two-second redraw (PR #3) |
+| `02e4024` | This log, and the rule in `CLAUDE.md` to keep it updated (PR #4) |
+| `PR #5` | Correcting this table, which recorded two PRs as open and was wrong within the minute |
 
 ### Decisions worth remembering
 
@@ -81,6 +82,11 @@ it would have looked fine.
 
 ### Also worth knowing
 
+- **Status does not belong in this log.** The entry above originally listed two
+  pull requests as "open" and was wrong within the minute, because they were
+  merged immediately after. A log records what happened and what was learned;
+  what is currently open belongs in the pull request list, which maintains
+  itself. Write entries that stay true.
 - A commit was nearly lost. The plain-English rewrite sat on a branch that had
   been declared safe to delete; a re-check before deleting found it. "I verified
   this earlier" has a shelf life when something else can still write to what you
@@ -94,6 +100,8 @@ it would have looked fine.
 - `main` is default and deploys; PRs gated by `check.yml`
 - One CloudFormation stack in `us-east-1`, effectively $0/month
 - The account's shared `Github-Actions` role also fixed for immutable-id claims
-- **Open:** PR #3 (News headline stays expanded) and PR #4 (this log)
-- **Needs a human:** three merged branches await deletion — this environment's
-  git proxy blocks ref deletion
+- 19 commits, the last four through the pull request flow, all deploys verified
+  against the live site rather than trusted from a green check
+- **Needs a human:** merged branches await deletion — this environment's git
+  proxy blocks ref deletion, and the GitHub tooling available here has no
+  delete-branch call
