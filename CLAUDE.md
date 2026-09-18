@@ -1,0 +1,95 @@
+# NQ Trading OS — working notes
+
+A windowed desktop for trading Nasdaq-100 futures off news, scheduled catalysts
+and sentiment. Live at **https://nq.nightowltradinggroup.com**.
+
+## Branching
+
+Feature branches off `main`, merged by pull request. **Do not commit directly to
+`main`** — it is what deploys. `check.yml` gates every PR.
+
+```bash
+git checkout main && git pull
+git checkout -b <type>/<short-name>
+# ... work ...
+git push -u origin <type>/<short-name>   # then open a PR into main
+```
+
+## What deploys, and what does not
+
+| Change | How it ships |
+|---|---|
+| `os/index.html`, `feed/**`, `aws/lambda/**` | merge to `main` → `deploy.yml` |
+| `aws/stack.yaml` (infrastructure) | a deliberate `./aws/deploy.sh` run |
+
+That split is why the CI role is tiny: it can replace the page, update and invoke
+the feed function, invalidate one distribution, and read one stack's outputs.
+Nothing else. A stack change needs credentials Actions does not have.
+
+## Layout
+
+```
+os/index.html          the entire OS - one file, no build step, no dependencies
+feed/core.mjs          RSS parsing, quote pulls, session-level derivation
+feed/sources.mjs       source registry and endpoints
+feed/fetch-news.mjs    local CLI -> data/feed.json
+aws/stack.yaml         S3 + CloudFront + DNS + scheduled Lambda + CI role
+aws/deploy.sh          one-command infrastructure deploy
+aws/lambda/feed/       the scheduled fetcher (shares feed/core.mjs)
+```
+
+## Checking your work
+
+There is no test suite. Before pushing:
+
+```bash
+node -e 'const fs=require("fs");const m=fs.readFileSync("os/index.html","utf8").match(/<script>([\s\S]*)<\/script>/);fs.writeFileSync("/tmp/os.js",m[1])' && node --check /tmp/os.js
+node --check feed/core.mjs && node --check aws/lambda/feed/index.mjs
+bash -n aws/deploy.sh
+npm run serve      # drop a data/feed.json beside os/ and it behaves as deployed
+```
+
+`check.yml` runs exactly these. They prove things **parse** — they do not catch
+runtime or environment behaviour, which is where every real defect here has come
+from.
+
+## Invariants worth keeping
+
+- **Never present simulated data as real.** The tape is a random walk until a
+  snapshot loads. A live feed that cannot compute a level (VWAP and the initial
+  balance do not exist before the cash session) must leave it absent rather than
+  fall back to a seeded value — the structure factor weights VWAP heavily, and a
+  real price measured against an invented one is worse than no reading.
+- **The score is not AI.** Headline sentiment is a keyword lexicon split into a
+  rates channel and a risk channel; the composite is a weighted sum. Only the
+  Brief app involves a model, and it only assembles a prompt for you to paste.
+- **The model is allowed to say "no trade"**, and most of the day it should.
+  Gates override direction entirely.
+- **One file, three runtimes.** `os/index.html` must work as a published
+  artifact, on AWS serving its own `feed.json`, and from any static server.
+
+## AWS
+
+Region `us-east-1`, stack `nq-trading-os`, account-scoped resources all prefixed
+`nq-trading-os-`. Feeds refresh every 10 minutes on weekdays via EventBridge.
+Cost is effectively zero — it is inside the perpetual free tiers.
+
+## Traps already paid for
+
+- **OIDC subject claims.** GitHub issues this repo's token as
+  `repo:owner@<ownerid>/name@<repoid>:ref:...`, not `repo:owner/name:ref:...`.
+  Trust policies must match both shapes. CloudTrail carries the real claim; the
+  role and provider look correct either way, so reading them tells you nothing.
+- **`npm` walks up for `package.json`.** This repo has one at its root, so
+  installing into a subdirectory without its own manifest silently installs to
+  the root and ships an incomplete zip.
+- **`aws lambda wait function-updated`** polls `lambda:GetFunctionConfiguration`,
+  which is a different action from `lambda:GetFunction`.
+- **ACM certificates for CloudFront must live in `us-east-1`**, whatever region
+  the rest of the stack is in.
+
+## Not advice
+
+Decision-support software. Nothing it produces is a recommendation to buy or
+sell anything, and the bias score is a weighted opinion, not a backtested edge.
+The journal exists so its value can be measured against real trades.
