@@ -1,29 +1,37 @@
 # NQ Trading OS
 
-A windowed desktop for trading **Nasdaq-100 futures (NQ)** off news, scheduled
-catalysts and sentiment. It is built around one opinion: most of the day there
-is no trade, and the job of a news tool is to tell you *which* hours are worth
-risking money in — not to manufacture a signal every five minutes.
+A windowed desktop for trading **Nasdaq-100 futures** off the news, the economic
+diary and the mood of the market. It is built around one opinion: most of the
+day there is no trade worth taking, and the job of a news tool is to tell you
+*which* hours are worth risking money in — not to manufacture a signal every
+five minutes.
 
-Run it as a published Artifact (a browser OS, nothing to install), and feed it
-real data with the fetcher in this repo. It is one page with three shells — a
+**Everything it says, it says in plain English.** You should be able to read any
+screen in it without knowing what a tick, a print or a basis point is: it says
+"today's average price" rather than VWAP, "the fear gauge" rather than the VIX,
+"betting on a rise" rather than long. The trading terms are still there where
+you would want them — in tooltips, in brackets, and in a short glossary at the
+bottom of Settings — but you never have to know one to use the thing.
+
+Run it as a published Artifact (a browser desktop, nothing to install), and feed
+it real data with the fetcher in this repo. It is one page with three shells — a
 windowed desktop, a two-pane tablet layout and a single-app phone layout — and
 it picks the right one at runtime.
 
 ---
 
-## What's in the OS
+## What's in it
 
-| App | What it does |
+| Panel | What it does |
 |---|---|
-| **Signal** | The composite bias score (−100…+100), the verdict, and every factor that produced it, with its weight and its reasoning shown. Plus position sizing from your own risk settings. |
-| **Wire** | Scored headlines. Each one gets a sentiment score, a tier, a channel (rates vs risk) and a mega-cap tag. Click any story to see exactly which patterns fired. Paste your own headline to score it. |
-| **Catalysts** | A three-day economic calendar generated from each release's publication rule, with countdowns and the no-trade windows around tier-1 prints. |
-| **Tape** | Quotes for the correlated complex (ES, VIX, 10Y, DXY, gold, crude, BTC) plus the NQ–ES spread, and the level ladder — overnight high/low, prior day high/low/close, initial balance, VWAP. |
-| **Playbook** | Seven named setups with live condition checks. A setup is *armed* only when every condition is met; otherwise you see which ones are missing. |
-| **Journal** | Log the read you took and what it did. The stats compare the bias score on your winners against your losers — that is the number that tells you whether to raise or lower your threshold. |
-| **Brief** | Assembles everything the console knows into one prompt — factors, gates, tape, levels, wire, calendar, playbook, your risk parameters — and you paste it into Claude yourself. Pick an angle, toggle the sections, copy. No key, no cost, any model you like. |
-| **Settings** | Theme, macro regime, reference price, risk per trade, instrument (NQ or MNQ), engagement thresholds, and the snapshot loader. |
+| **Verdict** | One of five answers — sit it out, no clear signal, watch, leaning up/down, strongly up/down — with a sentence saying why in plain words. Underneath: the score from −100 to +100, all six inputs that produced it with their weights and reasoning, and, if you did trade it, how much to buy and where to get out, worked out from your own risk settings. |
+| **News** | Every headline scored from −100 to +100 for what it means for *this index*, not for whether it is good news in general. Tap any story to see the reasoning: which way it reads, whether it is about the economy or about company performance, how much the source is trusted and how much the story has aged. Paste your own headline to score it. |
+| **Diary** | Three days of scheduled events, with a plain description of what each one measures and a countdown. The big ones are exactly where the tool tells you to stand aside. |
+| **Prices** | The Nasdaq-100 and the eight things that move with it (or against it), each named rather than tickered: the wider market, the fear gauge, the US borrowing rate, the dollar, gold, oil, bitcoin. Plus the prices worth watching today — yesterday's high and low, the overnight range, the first-hour range, the day's average price — and how far away each one is. |
+| **Patterns** | Seven situations that come up again and again, each with its conditions ticked off live. A pattern is *all set* only when every line is ticked, and even then it is a prompt to look, not an instruction to trade. |
+| **Journal** | Note down what you did and what happened. The stats compare the score on the trades that worked against the ones that did not — that is the number that tells you whether to be fussier or less fussy. |
+| **Ask Claude** | There is no AI in the page. This gathers everything the dashboard knows — the score and why, prices, news, what is scheduled, your own record — into one message you paste into Claude yourself. It asks for an answer in plain English too. Pick a question, choose what to include, copy. No key, no cost, any model you like. |
+| **Settings** | Appearance, whether good economic news is currently good or bad for shares, your risk limits, how fussy the tool should be, where to paste real data — and a glossary of the words you will still meet. |
 
 ---
 
@@ -36,8 +44,8 @@ never disagree about which shell is running.
 
 | Shell | When | What you get |
 |---|---|---|
-| **Phone** | viewport ≤ 700px wide, or a touch device whose short side is ≤ 480px (a phone held sideways) | One full-bleed app at a time. Compact two-row header with the live ticker, a bottom tab bar for Signal / Wire / Catalysts / Tape, and a **More** sheet for Playbook, Journal, Brief and Settings. No title bars, no dragging — thumb-sized targets and 16px inputs so iOS does not zoom on focus. |
-| **Tablet** | up to 1180px wide, or a touch device whose short side is ≤ 1024px | Two tiled panes, each with its own tab strip. Pane **A** is the reference column (Signal by default), pane **B** the working column. The ⇄ button moves an app between panes. Landscape puts the apps in a left icon rail; portrait stacks the panes and keeps the dock at the bottom. |
+| **Phone** | viewport ≤ 700px wide, or a touch device whose short side is ≤ 480px (a phone held sideways) | One full-bleed app at a time. Compact two-row header with the live ticker, a bottom tab bar for Verdict / News / Diary / Prices, and a **More** sheet for Patterns, Journal, Ask Claude and Settings. No title bars, no dragging — thumb-sized targets and 16px inputs so iOS does not zoom on focus. |
+| **Tablet** | up to 1180px wide, or a touch device whose short side is ≤ 1024px | Two tiled panes, each with its own tab strip. Pane **A** is the reference column (Verdict by default), pane **B** the working column. The ⇄ button moves an app between panes. Landscape puts the apps in a left icon rail; portrait stacks the panes and keeps the dock at the bottom. |
 | **Desktop** | wider than 1180px with a fine pointer | The original free-floating window manager, unchanged — drag, resize, minimise, maximise, z-order. |
 
 Crossing a breakpoint rebuilds the shell around whatever is already open. The
@@ -52,34 +60,37 @@ document, served from the same S3 object to every device, deciding at runtime.
 
 ---
 
-## The bias score
+## The score
 
-Six factors, each scored −100…+100, then weighted:
+Six inputs, each scored −100…+100, then blended. The name in the first column is
+what the app calls it on screen; the second is the same thing in trader shorthand,
+for anyone who wants to check the arithmetic.
 
-| Factor | Weight | What it reads |
-|---|---|---|
-| News tape | 24% | Recency-weighted mean of headline scores over 4 hours, 45-minute half-life, weighted by source tier and story tier |
-| Catalyst posture | 16% | Pending tier-1 event → neutral by construction. After a print → the *reaction* in the macro channel, not the number |
-| Rates & dollar | 18% | 10-year yield and DXY, both inverse to the multiple |
-| Risk appetite | 18% | VIX change, and whether NQ is leading or lagging ES |
-| Session structure | 14% | Price against VWAP, the overnight range and the prior day's range |
-| Mega-cap torque | 10% | Stories on the top-weight names — the top seven are ~45% of index weight |
+| What it looks at | In trader terms | Weight | What it reads |
+|---|---|---|---|
+| What the news is saying | news tape | 24% | Average headline score over 4 hours, newer stories counting for more (45-minute half-life), weighted by how trusted the source is and how big the story is |
+| Big announcements due | catalyst posture | 16% | Something major pending → neutral by construction, because nobody knows. Just after one → the *reaction*, not the number |
+| Interest rates and the dollar | rates & dollar | 18% | The 10-year yield and the dollar index, both of which this index tends to move opposite to |
+| How brave the market feels | risk appetite | 18% | The VIX, and whether the Nasdaq is leading or lagging the S&P 500 |
+| Where the price sits today | session structure | 14% | Price against VWAP, the overnight range and yesterday's range |
+| The giant companies | mega-cap torque | 10% | Stories on the top-weight names — the top seven are ~45% of the index |
 
-**Confidence** is 45% factor agreement + 35% session liquidity + 20% how fresh
-the tape is.
+**How sure it is** ("confidence") is 45% whether those six agree with each other,
+35% how many people are trading at this hour, 20% how fresh the news is.
 
-**Gates** override direction entirely and force a stand-down: a closed or
-halted market, the window either side of a tier-1 print, pre-release volatility
-compression, lunch chop with no edge, and low confidence. The model is allowed
-to say *no trade*, and most of the day it does.
+A handful of conditions **override the direction entirely** and simply say stay
+out: a closed or halted market, the minutes either side of a big announcement,
+the quiet compression before one, a directionless lunchtime, and the six inputs
+disagreeing. The model is allowed to say *no trade*, and most of the day it does.
 
-### The regime switch matters more than anything else
+### One setting matters more than all the others
 
-In **Settings → Macro regime** you choose whether good economic news is good or
-bad for the index. In an inflation-fighting regime a hot jobs number is bearish
-for NQ because it pushes the discount rate up; in a growth regime the same
-number is bullish. The switch flips the sign of the rates channel — set it
-wrong and half the model is inverted.
+In **Settings → "What is the market worried about?"** you choose whether good
+economic news is currently good or bad for share prices. When central banks are
+fighting inflation, a strong jobs report is bad news for the index, because it
+means rates stay high for longer and future profits are discounted harder; when
+growth is the worry, the same report is good news. The switch flips the sign of
+everything read on the economy — set it wrong and half the tool is inverted.
 
 ---
 
@@ -94,10 +105,11 @@ npm run feed          # writes data/feed.json
 npm run feed:print    # and prints the headlines
 ```
 
-Then in the OS: **Settings → Load a snapshot → paste `data/feed.json` → Load**.
-That replaces the simulated tape with real quotes, real session levels
-(overnight high/low, prior day range, initial balance, VWAP computed from the
-5-minute bars) and a real wire. The snapshot is stored, so it survives a reload.
+Then in the app: **Settings → Real prices and real news → paste `data/feed.json`
+→ Use this data**. That replaces the made-up prices with real ones, the example
+headlines with real news, and fills in the prices worth watching (the overnight
+high and low, yesterday's range, the first-hour range and the day's average
+price, all computed from 5-minute bars). It is stored, so it survives a reload.
 
 If you deploy to AWS (below), skip all of this — the OS reads its own feed and
 refreshes itself.
@@ -136,8 +148,8 @@ page, runs the first feed pull, and prints your URL. Re-run it any time to
 update. `./aws/destroy.sh` removes everything.
 
 There is no server-side model anywhere in this stack — no API key, no inference
-endpoint, nothing to rate-limit or leak. The Brief app produces a prompt; you
-decide what to do with it.
+endpoint, nothing to rate-limit or leak. The Ask Claude panel produces a prompt;
+you decide what to do with it.
 
 ### Architecture
 
@@ -291,18 +303,23 @@ three places, because none of them depends on anything outside the page.
 ## Calendar accuracy
 
 Events are generated from publication rules, not from a hardcoded list, so the
-board never goes stale: NFP on the first Friday, CPI the 10th–13th, PPI and
-retail sales mid-month, PCE at month-end, ISM on the first and third business
-days, claims every Thursday, opex on the third Friday, quad witching quarterly.
+diary never goes stale: the jobs report on the first Friday, inflation figures
+the 10th–13th, wholesale prices and retail sales mid-month, the Fed's preferred
+inflation gauge at month-end, the business surveys on the first and third
+business days, unemployment claims every Thursday, monthly options expiry on the
+third Friday, the quarterly expiry four times a year.
 
-**FOMC dates follow the usual meeting cadence and shift by about a week in some
-years — check them against the Fed's own calendar before you trade them.**
+**Interest-rate decisions follow the usual meeting cadence and shift by about a
+week in some years — check them against the Fed's own calendar before you trade
+them.**
 
 ---
 
 ## Not advice
 
-This is decision-support software. Nothing it produces is a recommendation to
-buy or sell anything. Futures are leveraged and you can lose more than you
-deposit. The tape is simulated until you load a snapshot, and every number the
-OS shows you comes with its reasoning so you can disagree with it.
+This is a tool for thinking, not financial advice. Nothing it produces is a
+recommendation to buy or sell anything. Futures are borrowed money by design:
+losses are magnified exactly as gains are, and you can lose more than you put
+in. The prices are made up until you load real ones, and every number the app
+shows you comes with its reasoning, in plain words, so that you can disagree
+with it.
