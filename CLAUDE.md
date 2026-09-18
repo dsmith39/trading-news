@@ -3,6 +3,27 @@
 A windowed desktop for trading Nasdaq-100 futures off news, scheduled catalysts
 and sentiment. Live at **https://nq.nightowltradinggroup.com**.
 
+## The session log
+
+[SESSIONS.md](SESSIONS.md) records what has been built, why it was built that
+way, and what went wrong getting there.
+
+**Update it as part of every change to the codebase or the project — in the same
+commit, not afterwards.** A change is not finished until its entry exists. This
+applies to infrastructure, configuration and process changes too, not only code:
+several of the costliest problems here lived in an IAM policy and a workflow
+file, not in the repository's source.
+
+An entry records what changed, why, the commit or PR, and anything learned that
+the diff does not show — a constraint discovered, a failure and its cause, a
+decision and the option it beat. Skip it only for changes that teach nothing, a
+typo fix being the clear case.
+
+The reason is concrete: every defect in this project so far was invisible from
+the code and cost a failed deploy to find. Written down they cost nothing to
+avoid; undocumented they get rediscovered by whoever comes next, including a
+later session of Claude with no memory of this one.
+
 ## Branching
 
 Feature branches off `main`, merged by pull request. **Do not commit directly to
