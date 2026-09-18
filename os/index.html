@@ -709,14 +709,19 @@ function computeSignal(){
     note:"VIX "+fmt(q.vx.last,2)+" ("+sgn(q.vx.pct)+"%) · NQ "+(lead>=0?"leading":"lagging")+" ES by "+fmt(Math.abs(lead),2)+"%"});
 
   /* 5 — session structure */
-  let st=0, sn=[];
-  if(nq>L.vwap){st+=26;sn.push("above VWAP");} else {st-=26;sn.push("below VWAP");}
-  if(nq>L.onh){st+=24;sn.push("above overnight high");}
-  else if(nq<L.onl){st-=24;sn.push("below overnight low");}
-  else sn.push("inside the overnight range");
-  if(nq>L.pdh){st+=18;sn.push("above prior day high");}
-  else if(nq<L.pdl){st-=18;sn.push("below prior day low");}
-  if(nq>L.pdc){st+=10;} else {st-=10;}
+  let st=0, sn=[], haveLv=0;
+  if(L.vwap!=null){ haveLv++;
+    if(nq>L.vwap){st+=26;sn.push("above VWAP");} else {st-=26;sn.push("below VWAP");} }
+  if(L.onh!=null&&L.onl!=null){ haveLv++;
+    if(nq>L.onh){st+=24;sn.push("above overnight high");}
+    else if(nq<L.onl){st-=24;sn.push("below overnight low");}
+    else sn.push("inside the overnight range"); }
+  if(L.pdh!=null&&L.pdl!=null){ haveLv++;
+    if(nq>L.pdh){st+=18;sn.push("above prior day high");}
+    else if(nq<L.pdl){st-=18;sn.push("below prior day low");} }
+  if(L.pdc!=null){ haveLv++; st+=nq>L.pdc?10:-10;
+    sn.push(nq>L.pdc?"above prior day close":"below prior day close"); }
+  if(!haveLv) sn.push("no session levels in this feed yet, so structure sits out");
   F.push({id:"struct",name:"Session structure",w:.14,score:Math.round(clamp(st,-100,100)),
     note:sn.join(" · ")});
 
@@ -1069,13 +1074,15 @@ R.tape=function(b){
      '<div class="c" style="color:var(--ink-3)">'+(spread>=0?'NQ leading':'NQ lagging')+'</div></div>';
   h+='</div>';
 
-  const vals=[L.pdh,L.onh,L.ibh,L.vwap,L.pdc,L.ibl,L.onl,L.pdl,nq];
+  const named=[["PDH",L.pdh],["ONH",L.onh],["IBH",L.ibh],["VWAP",L.vwap],["PDC",L.pdc],
+               ["IBL",L.ibl],["ONL",L.onl],["PDL",L.pdl]].filter(x=>x[1]!=null);
+  const missing=["PDH","ONH","IBH","VWAP","PDC","IBL","ONL","PDL"]
+    .filter(n=>!named.some(x=>x[0]===n));
+  const vals=named.map(x=>x[1]).concat([nq]);
   /* pad the domain so a tight cluster of levels still reads */
   const raw=[Math.min(...vals),Math.max(...vals)], padv=Math.max((raw[1]-raw[0])*0.12,raw[1]*0.0006);
   const hi=raw[1]+padv, lo=raw[0]-padv, rng=hi-lo||1;
   const pos=v=>((hi-v)/rng*100);
-  const named=[["PDH",L.pdh],["ONH",L.onh],["IBH",L.ibh],["VWAP",L.vwap],["PDC",L.pdc],
-               ["IBL",L.ibl],["ONL",L.onl],["PDL",L.pdl]];
   h+='<hr class="sep"><div class="lab">Levels that matter today</div><div class="ladder">';
   for(const [n,v] of named)
     h+='<div class="lv" style="top:'+pos(v).toFixed(2)+'%"><b>'+fmt(v,2)+'</b><span>'+n+'</span></div>';
@@ -1088,6 +1095,10 @@ R.tape=function(b){
        '<span class="d '+cls(d)+'">'+sgn(d)+'</span></div>';
   }
   h+='</div>';
+  if(missing.length)
+    h+='<div class="note" style="margin-top:6px"><b>Not in this feed yet:</b> '+missing.join(", ")+
+       '. VWAP and the initial balance only exist once the cash session has traded, so they stay '+
+       'empty overnight instead of showing a number nobody measured.</div>';
   h+='<div class="note" style="margin-top:10px">'+(market.live
       ? "Live snapshot written "+esc(market.stamp||"")+"."
       : "Simulated tape — a random walk anchored to the reference price in Settings, so the structure logic "+
@@ -1566,7 +1577,16 @@ function loadSnapshot(snap){
     }
     market.live=true; market.stamp=snap.stamp||new Date().toLocaleString();
   }
-  if(snap.levels) Object.assign(market.levels,snap.levels);
+  if(snap.levels){
+    /* A live feed that cannot compute a level (no RTH bars yet, so no VWAP and
+       no initial balance) must leave it empty rather than fall back to what the
+       simulator seeded - a real price measured against an invented VWAP is
+       worse than no reading at all. */
+    const next={};
+    for(const k of ["onh","onl","pdh","pdl","pdc","ibh","ibl","vwap"])
+      next[k]=Number.isFinite(snap.levels[k])?snap.levels[k]:null;
+    market.levels=next;
+  }
   if(Array.isArray(snap.headlines)&&snap.headlines.length){
     state.wire=state.wire.filter(w=>!w.demo);
     ingest(snap.headlines.map(x=>({txt:x.txt||x.title,src:x.src||x.source||"Other",
