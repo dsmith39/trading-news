@@ -83,6 +83,33 @@ out: a closed or halted market, the minutes either side of a big announcement,
 the quiet compression before one, a directionless lunchtime, and the six inputs
 disagreeing. The model is allowed to say *no trade*, and most of the day it does.
 
+### Is the score any good?
+
+Honest answer: unknown, and the feed is now collecting what it takes to find
+out. Every pull appends to `history.json` the price of each market at that
+moment, and any headline it had not seen before with the reading the lexicon
+gave it. Forward returns are derived from that price track rather than stored,
+so a horizon can be added later without re-collecting a month of data.
+
+```bash
+npm run score:report                        # the local track record
+npm run score:report -- https://nq.nightowltradinggroup.com/history.json
+npm run score:report -- --rows              # and the individual readings
+```
+
+The number that matters is the **spread**: the average move after a bullish
+reading minus the average after a bearish one. A lexicon with no edge produces
+the same average either way and the spread sits on zero, however confident the
+headlines sound. Two rules keep that measurement from flattering itself — the
+entry is the moment the feed *saw* the headline, not the timestamp the publisher
+put on it, and a horizon with no price near it stays blank rather than reaching
+for the nearest bar.
+
+What it already says, on the first pull: the lexicon gives a non-zero reading to
+about **one headline in eight**. That is why the news factor's weight now scales
+with how much of the wire it could actually read, and it is the argument for
+replacing the lexicon rather than tuning it.
+
 ### One setting matters more than all the others
 
 In **Settings → "What is the market worried about?"** you choose whether good
@@ -269,7 +296,8 @@ prints both — useful in the minutes before DNS settles.
 
 - The S3 bucket is fully private; only CloudFront can read it, through an
   Origin Access Control.
-- The feed Lambda can write exactly one object — `feed.json` — and nothing else.
+- The feed Lambda can touch exactly two objects — `feed.json` and
+  `history.json` — and nothing else. It cannot delete either of them.
 - Nothing in the stack accepts input from the internet. There is no API, no
   endpoint and no credential anywhere in it; the only moving part is a scheduled
   job that reads public feeds and writes one file.
@@ -283,11 +311,17 @@ prints both — useful in the minutes before DNS settles.
 os/index.html          the whole OS — one file, no build step, no dependencies
 feed/core.mjs          the fetch logic: RSS parsing, quotes, session levels
 feed/sources.mjs       source registry, tiers and endpoints
-feed/fetch-news.mjs    local CLI wrapper -> data/feed.json
+feed/instruments.mjs   the sixteen markets, and what drives each of them
+feed/score.mjs         the headline scorer, shared with the page
+feed/history.mjs       the scorer's track record and the returns derived from it
+feed/fetch-news.mjs    local CLI wrapper -> data/feed.json, data/history.json
+feed/score-report.mjs  local CLI: what the scorer has been worth
 aws/stack.yaml         CloudFormation: S3 + CloudFront + scheduled Lambda
 aws/deploy.sh          one-command deploy; aws/destroy.sh removes it all
-aws/lambda/feed/       the scheduled fetcher (shares feed/core.mjs)
+aws/lambda/feed/       the scheduled fetcher (shares everything in feed/)
+tools/                 the checks CI runs
 data/feed.json         the local snapshot (git-ignored)
+data/history.json      the local track record (git-ignored)
 ```
 
 The same `os/index.html` runs anywhere: as a published Artifact, on AWS where it

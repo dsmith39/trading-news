@@ -136,6 +136,94 @@ it behaves: Tesla at 1.49% against ±2.04% priced correctly stops firing, while
 the Nasdaq at 1.06% against ±0.68% correctly still does. Comparing like with
 like was the whole fix.
 
+### Giving the score a scoreboard
+
+The lexicon had never been measured. Every weight in the composite, and the
+lexicon itself, was an opinion; a live sample showed **54 of 58 headlines
+scoring zero** and two of the four scored ones pointing the wrong way. Coverage
+weighting (last round) stopped that silence from speaking with authority it had
+not earned, but it did not answer whether the readings that *do* fire are worth
+anything. Nothing in the project could answer that, because nothing kept a
+record.
+
+It does now. Each pull appends to `history.json`:
+
+- one row of every instrument's price at that moment, and
+- any headline not seen before, with its score, channel, impact, entity and the
+  markets it reaches.
+
+**Forward returns are not stored.** They are derived from the price track by
+`feed/history.mjs` whenever asked. That was the design decision worth making:
+the obvious shape — write a row now, come back later and fill in its 15/60/240
+minute returns — needs back-fill logic, leaves rows half-written between pulls,
+and freezes the horizons on the day it is written. Deriving them instead means
+a new horizon can be asked of a month of data already collected, and no row is
+ever in a partial state. `npm run score:report` prints the result.
+
+Two rules in that file exist to stop the measurement flattering the thing it
+measures, and both are easy to get wrong in the direction that looks good:
+
+- **The entry is when we saw it, not when it was published.** Google News hands
+  back stories up to twelve hours old. Measuring from the publisher's timestamp
+  would credit the scorer with moves that had finished before it read a word.
+  The published timestamp is still recorded, but only to show how stale the wire
+  was.
+- **A horizon with no price near it stays blank.** The feed runs weekdays only,
+  so a four-hour return on a Friday afternoon headline has no honest answer
+  until Monday. Reaching for the nearest available bar would make the scorer
+  look best exactly where it knows least. Tolerance is 25 minutes past the
+  target — one pull interval and a half — and beyond that the reading is absent,
+  not zero.
+
+First live pull, recorded rather than observed: **14 of 116 headlines scored**,
+12%. Consistent with the earlier sample, and now it is a number the repo keeps
+rather than one somebody noticed once.
+
+### Two copies of the scorer, and a check that they stay identical
+
+The Lambda could not record a score, because `scoreHeadline` and its lexicon
+lived only inside `os/index.html`. The page is one file with no build step and
+no imports — that is an invariant, it is what makes it run as an Artifact, on
+AWS and from any static server — so the feed cannot import from it and the page
+cannot import from the feed. Two copies were unavoidable.
+
+Two copies of anything drift, and this pair drifting is a particularly nasty
+defect: the recorded track record silently becomes a measurement of something
+the page no longer does, with no trace in the diff and none at runtime. So both
+copies are wrapped in markers, and `tools/check-scorer.mjs` fails CI if the
+bytes between them differ. Verified by changing one weight from -42 to -41 and
+watching it name the line.
+
+The alternative considered and rejected: generate the page's block from
+`feed/score.mjs` at deploy time. That is a build step, and the invariant is
+worth more than the duplication costs.
+
+### The first behavioural checks in the repo
+
+`tools/check-history.mjs` is the first thing here that runs code rather than
+parsing it. The justification is narrow and worth stating: the previous entry in
+this log ends with "the CI checks prove things **parse** — not one of the defects
+above would have been caught by them", and the forward-return bookkeeping fails
+in exactly that invisible way. It checks that a repeated headline is logged once,
+that the entry price comes from the pull that saw it, that a gap in the price
+track produces an absent reading rather than a zero, that retention trims, and
+that a corrupt history file starts a fresh one instead of propagating.
+
+It caught its own author: the first version asserted every reading in the
+fixture was +1%, which failed because the fixture quoted two markets and only
+one of them moved. The check was wrong, not the code — but a fixture that quotes
+one market says what it means.
+
+### Infrastructure
+
+`FeedRole` gained `s3:GetObject` and `s3:PutObject` on `history.json` — the file
+is read back and rewritten each pull. Still no wildcard: the feed function can
+touch exactly two objects in the bucket and can delete neither. This is a stack
+change, so it needs a deliberate deploy; the CI role cannot make it, by design.
+
+`aws/package-feed.sh` gained `score.mjs` and `history.mjs`. That list having one
+home is what made this a one-line change rather than the trap it was last round.
+
 ### Traps found this round
 
 - **The Lambda package's file list lived in two places.** `core.mjs` gained an
@@ -168,6 +256,9 @@ like was the whole fix.
 - Live on the custom domain, feed refreshing every 10 minutes on weekdays
 - `main` is default and deploys; PRs gated by `check.yml`
 - One CloudFormation stack in `us-east-1`, effectively $0/month
+- `history.json` collecting from the first pull after this deploy; the scorer's
+  spread means nothing until a few hundred scored headlines have resolved, which
+  is days, not hours
 - The account's shared `Github-Actions` role also fixed for immutable-id claims
 - 19 commits, the last four through the pull request flow, all deploys verified
   against the live site rather than trusted from a green check

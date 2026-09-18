@@ -3,13 +3,49 @@
  * feed.json next to the OS in the site bucket. The browser then picks it up
  * on its own — no paste, no key, no server to keep alive.
  *
- * Env: SITE_BUCKET, FEED_KEY (default "feed.json")
+ * It also appends to history.json: the price of every instrument at this
+ * moment, and any headline not seen before with the score the lexicon gave it.
+ * That file is what makes the bias score measurable rather than merely
+ * plausible — see feed/history.mjs for why the returns are not stored.
+ *
+ * Env: SITE_BUCKET, FEED_KEY (default "feed.json"), HISTORY_KEY (default
+ * "history.json"), HISTORY off when set to "0"
  */
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { snapshot } from "./core.mjs";
+import { scoreAll } from "./score.mjs";
+import { appendPull, EMPTY } from "./history.mjs";
 
 const s3 = new S3Client({});
 const KEY = process.env.FEED_KEY || "feed.json";
+const HIST_KEY = process.env.HISTORY_KEY || "history.json";
+
+/**
+ * Read, append, write. Deliberately wrapped so that nothing here can fail the
+ * run: feed.json is the product and is already written by the time this is
+ * called, while this file is instrumentation. A missing object is the first
+ * run, not an error.
+ */
+async function recordHistory(snap) {
+  let prev = EMPTY;
+  try {
+    const got = await s3.send(new GetObjectCommand({ Bucket: process.env.SITE_BUCKET, Key: HIST_KEY }));
+    prev = JSON.parse(await got.Body.transformToString());
+  } catch (e) {
+    if (e.name !== "NoSuchKey" && e.name !== "NoSuchBucket") throw e;
+    console.log("no history yet — starting one");
+  }
+  const hist = appendPull(prev, snap, scoreAll(snap.headlines));
+  await s3.send(new PutObjectCommand({
+    Bucket: process.env.SITE_BUCKET,
+    Key: HIST_KEY,
+    Body: JSON.stringify(hist),
+    ContentType: "application/json",
+    /* Nothing reads this in a hurry, and it is large. */
+    CacheControl: "public, max-age=600, must-revalidate"
+  }));
+  return hist.px.length + " pulls, " + hist.hl.length + " headlines on record";
+}
 
 export const handler = async () => {
   const started = Date.now();
@@ -29,6 +65,11 @@ export const handler = async () => {
     ContentType: "application/json",
     CacheControl: "public, max-age=60, must-revalidate"
   }));
+
+  if (process.env.HISTORY !== "0") {
+    try { console.log(await recordHistory(snap)); }
+    catch (e) { console.error("history not updated — " + e.name + ": " + e.message); }
+  }
 
   const msg = snap.headlines.length + " headlines, " + Object.keys(snap.quotes).length +
     " quotes in " + ((Date.now() - started) / 1000).toFixed(1) + "s";

@@ -724,6 +724,7 @@ function minsUntil(off,min){const t=et(); return off*1440+min-t.min-t.s/60;}
    negative for NQ because it pushes the discount rate up. The regime flag
    inverts the macro channel only; the equity channel never inverts.
    ===================================================================== */
+/* ---8<--- shared scorer: keep byte-identical to feed/score.mjs ---8<--- */
 const LEX_EQ=[
   [/record (high|quarter|revenue|backlog)/i,55],[/beats? (on|estimates|expectations)/i,55],
   [/tops? (estimates|expectations|views)/i,52],[/raises? (guidance|outlook|forecast|target)/i,62],
@@ -773,6 +774,7 @@ function scoreHeadline(text,regime){
   return {score:Math.round(clamp(raw,-100,100)),impact,entity,
           channel:Math.abs(mac)>Math.abs(eq)?"macro":"equity",hits:hits.slice(0,4)};
 }
+/* ---8<--- end shared scorer ---8<--- */
 
 /* =====================================================================
    MARKET MODEL
