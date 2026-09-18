@@ -186,11 +186,13 @@ deploy from GitHub do):
 
 ```bash
 ./aws/deploy.sh --domain nq.example.com --github-repo owner/repo
-gh variable set AWS_DEPLOY_ROLE_ARN --repo owner/repo --body "<the ARN it prints>"
+gh secret set AWS_DEPLOY_ROLE_ARN --repo owner/repo --body "<the ARN it prints>"
 ```
 
 `--github-repo` creates a role trusted only by that repository, via the OIDC
-provider — no access keys, nothing long-lived in GitHub. The workflow reads the
+provider — no access keys, nothing long-lived in GitHub. It goes in a *secret*
+rather than a variable because a public repository has public Actions logs, and
+secrets are masked there while variables are not. The workflow reads the
 bucket, distribution and function names from the stack at run time rather than
 hardcoding them, which matters here because the bucket name contains the account
 id and this repo is public.

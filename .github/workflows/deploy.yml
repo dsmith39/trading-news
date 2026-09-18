@@ -7,7 +7,11 @@
 #
 # One-time setup:
 #   1. ./aws/deploy.sh --domain <host> --github-repo <owner/repo>
-#   2. gh variable set AWS_DEPLOY_ROLE_ARN --body "<GithubDeployRoleArn output>"
+#   2. gh secret set AWS_DEPLOY_ROLE_ARN --body "<GithubDeployRoleArn output>"
+#
+# A secret rather than a variable because this repository is public, which makes
+# its Actions logs public: secrets are masked in logs, variables are not, and the
+# ARN carries the AWS account id.
 
 name: Deploy
 
@@ -42,7 +46,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       # Read names from the stack rather than hardcoding them - this repo is
@@ -51,6 +55,9 @@ jobs:
         id: stack
         run: |
           set -euo pipefail
+          # Public repo means public logs. The account id appears inside the
+          # bucket name, so redact it before any later step echoes that name.
+          echo "::add-mask::$(aws sts get-caller-identity --query Account --output text)"
           out() { aws cloudformation describe-stacks --stack-name "$STACK" \
                     --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
           {
