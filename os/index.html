@@ -1426,6 +1426,10 @@ R.signal=function(b){
 
 /* --------------------------------------------------------------- WIRE */
 let wireFilter="all";
+/* Which headlines the reader has expanded. This lives here and not in the DOM
+   because the page re-renders itself every two seconds to age the timestamps,
+   and anything held only as a class on an element is wiped by that redraw. */
+const wireOpen=new Set();
 R.wire=function(b){
   const f=state.wire.filter(w=>wireFilter==="all"||(wireFilter==="hi"&&w.impact===3)||
     (wireFilter==="bull"&&w.score>15)||(wireFilter==="bear"&&w.score<-15)||
@@ -1444,7 +1448,8 @@ R.wire=function(b){
   for(const w of f){
     const mins=Math.round((Date.now()-w.ts)/60000);
     const age=mins<60?mins+"m":Math.floor(mins/60)+"h"+pad(mins%60);
-    h+='<div class="item" data-id="'+w.id+'" title="Tap to see why it scored this way">'+
+    h+='<div class="item'+(wireOpen.has(w.id)?" open":"")+'" data-id="'+w.id+
+       '" title="Tap to see why it scored this way">'+
        '<div class="sc '+cls(w.score)+'">'+(w.score>0?"+":"")+w.score+
        '<small>'+(w.channel==="macro"?"ECONOMY":"BUSINESS")+'</small></div><div>'+
        '<h4>'+esc(w.txt)+'</h4><div class="meta">'+
@@ -1461,7 +1466,11 @@ R.wire=function(b){
   b.innerHTML=h;
   b.querySelectorAll("[data-f]").forEach(n=>n.onclick=()=>{wireFilter=n.dataset.f;renderApp("wire");});
   $("#wire-add",b).onclick=()=>pasteHeadline();
-  b.querySelectorAll(".item").forEach(n=>n.onclick=()=>n.classList.toggle("open"));
+  b.querySelectorAll(".item").forEach(n=>n.onclick=()=>{
+    const id=n.dataset.id;
+    if(wireOpen.has(id)) wireOpen.delete(id); else wireOpen.add(id);
+    n.classList.toggle("open",wireOpen.has(id));
+  });
 };
 function wireWhy(w){
   let s="This one reads as <b>"+(w.score>15?"good news for this index":w.score<-15?"bad news for this index":
