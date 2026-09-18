@@ -43,6 +43,14 @@ if [ -n "$KEY" ]; then
        printf '%s' "$TOKEN" > "$TOKFILE"; chmod 600 "$TOKFILE"; fi
 fi
 
+# Only pass the analyst parameters when there is a key. Empty-string values are
+# awkward for `cloudformation deploy`, and the template already defaults them.
+PARAMS=(ProjectName="$PROJECT" FeedSchedule="$SCHEDULE")
+if [ -n "$KEY" ]; then
+  PARAMS+=(AnthropicApiKey="$KEY" AnalystModel="$MODEL" \
+           AnalystMaxTokens="$MAX_TOKENS" AnalystSharedToken="$TOKEN")
+fi
+
 echo "==> stack: $PROJECT   region: $REGION"
 aws cloudformation deploy \
   --region "$REGION" \
@@ -50,13 +58,7 @@ aws cloudformation deploy \
   --template-file aws/stack.yaml \
   --capabilities CAPABILITY_IAM \
   --no-fail-on-empty-changeset \
-  --parameter-overrides \
-      ProjectName="$PROJECT" \
-      FeedSchedule="$SCHEDULE" \
-      AnthropicApiKey="$KEY" \
-      AnalystModel="$MODEL" \
-      AnalystMaxTokens="$MAX_TOKENS" \
-      AnalystSharedToken="$TOKEN"
+  --parameter-overrides "${PARAMS[@]}"
 
 out() { aws cloudformation describe-stacks --region "$REGION" --stack-name "$PROJECT" \
   --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
