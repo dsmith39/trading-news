@@ -1,0 +1,103 @@
+# Content deploys for NQ Trading OS.
+#
+# The stack itself (bucket, CloudFront, DNS, the scheduled feed function) is
+# infrastructure and is managed by ./aws/deploy.sh. This workflow only ships
+# what changes often: the page and the feed function's code. That split is why
+# the role it assumes can do so little.
+#
+# One-time setup:
+#   1. ./aws/deploy.sh --domain <host> --github-repo <owner/repo>
+#   2. gh variable set AWS_DEPLOY_ROLE_ARN --body "<GithubDeployRoleArn output>"
+
+name: Deploy
+
+on:
+  push:
+    branches: [claude/futures-news-sentiment-tool-150m3v]
+    paths:
+      - 'os/**'
+      - 'feed/**'
+      - 'aws/lambda/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+# OIDC needs id-token; nothing here writes to the repo.
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-nq-trading-os
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  STACK: nq-trading-os
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Read names from the stack rather than hardcoding them - this repo is
+      # public and the bucket name carries the account id.
+      - name: Read stack outputs
+        id: stack
+        run: |
+          set -euo pipefail
+          out() { aws cloudformation describe-stacks --stack-name "$STACK" \
+                    --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+          {
+            echo "bucket=$(out SiteBucket)"
+            echo "dist=$(out DistributionId)"
+            echo "feed=$(out FeedFunction)"
+            echo "url=$(out SiteUrl)"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Package and ship the feed function
+        run: |
+          set -euo pipefail
+          mkdir -p build/feed
+          cp aws/lambda/feed/index.mjs feed/core.mjs feed/sources.mjs build/feed/
+          # The Node 22 runtime bundles the AWS SDK, but vendoring the one client
+          # we use removes any dependency on that staying true.
+          ( cd build/feed && npm install --silent --no-audit --no-fund --omit=dev @aws-sdk/client-s3 )
+          ( cd build/feed && zip -qr ../feed.zip . )
+          aws lambda update-function-code \
+            --function-name "${{ steps.stack.outputs.feed }}" \
+            --zip-file fileb://build/feed.zip --output text --query LastModified
+          aws lambda wait function-updated --function-name "${{ steps.stack.outputs.feed }}"
+
+      - name: Upload the OS
+        run: |
+          aws s3 cp os/index.html "s3://${{ steps.stack.outputs.bucket }}/index.html" \
+            --content-type "text/html; charset=utf-8" \
+            --cache-control "public, max-age=60, must-revalidate" \
+            --only-show-errors
+
+      - name: Pull a fresh feed
+        run: |
+          set -euo pipefail
+          aws lambda invoke --function-name "${{ steps.stack.outputs.feed }}" \
+            --cli-read-timeout 150 /tmp/feed-out.json --output text --query StatusCode > /dev/null
+          cat /tmp/feed-out.json; echo
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ steps.stack.outputs.dist }}" \
+            --paths /index.html /feed.json \
+            --output text --query 'Invalidation.Status'
+
+      - name: Summary
+        run: echo "Deployed ${{ steps.stack.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"

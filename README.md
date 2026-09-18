@@ -168,6 +168,33 @@ Cheaper still: a wider schedule interval is the only dial that matters, and even
 every 10 minutes is free. Pick the cadence you actually want, not the one you
 think you can afford.
 
+### Continuous deployment
+
+`.github/workflows/deploy.yml` ships the page and the feed function's code on
+every push that touches them, and on demand from the Actions tab.
+
+The split is deliberate: **Actions deploys content, `deploy.sh` manages
+infrastructure.** Anything that changes the stack — the schedule, the domain,
+the cache policy — is a `./aws/deploy.sh` run. That is why the role Actions
+assumes can do so little: replace the page, update and invoke the feed function,
+invalidate this one distribution, read this one stack's outputs. It cannot edit
+the stack, reach another bucket, or see anything else in the account.
+
+One-time setup, assuming you already have a
+`token.actions.githubusercontent.com` OIDC provider (most AWS accounts that
+deploy from GitHub do):
+
+```bash
+./aws/deploy.sh --domain nq.example.com --github-repo owner/repo
+gh variable set AWS_DEPLOY_ROLE_ARN --repo owner/repo --body "<the ARN it prints>"
+```
+
+`--github-repo` creates a role trusted only by that repository, via the OIDC
+provider — no access keys, nothing long-lived in GitHub. The workflow reads the
+bucket, distribution and function names from the stack at run time rather than
+hardcoding them, which matters here because the bucket name contains the account
+id and this repo is public.
+
 ### A custom domain
 
 ```bash

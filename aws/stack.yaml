@@ -39,9 +39,19 @@ Parameters:
     Description: >
       ACM certificate covering DomainName. Must live in us-east-1 — CloudFront
       accepts certificates from no other region. deploy.sh finds it for you.
+  GithubRepo:
+    Type: String
+    Default: ""
+    Description: >
+      owner/repo allowed to deploy this project from GitHub Actions, e.g.
+      dsmith39/trading-news. Creates a role scoped to exactly this project's
+      bucket, distribution and function — nothing else in the account. Needs an
+      existing token.actions.githubusercontent.com OIDC provider. Leave empty to
+      skip it.
 
 Conditions:
   WithDomain: !Not [!Equals [!Ref DomainName, ""]]
+  WithGithub: !Not [!Equals [!Ref GithubRepo, ""]]
 
 Resources:
 
@@ -209,6 +219,49 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt FeedSchedulerRule.Arn
 
+  # ------------------------------------------------- github actions deploy
+  # Deliberately narrow: this role can replace the page, refresh the feed and
+  # invalidate this one distribution. It cannot change the stack, touch another
+  # bucket, or read anything else in the account.
+  GithubDeployRole:
+    Type: AWS::IAM::Role
+    Condition: WithGithub
+    Properties:
+      RoleName: !Sub "${ProjectName}-github-deploy"
+      Description: !Sub "Content deploys for ${ProjectName} from GitHub Actions."
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GithubRepo}:*"
+      Policies:
+        - PolicyName: deploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:PutObject, s3:DeleteObject]
+                Resource: !Sub "${SiteBucket.Arn}/*"
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt SiteBucket.Arn
+              - Effect: Allow
+                Action: cloudfront:CreateInvalidation
+                Resource: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+              - Effect: Allow
+                Action: [lambda:UpdateFunctionCode, lambda:GetFunction, lambda:InvokeFunction]
+                Resource: !GetAtt FeedFunction.Arn
+              - Effect: Allow
+                Action: cloudformation:DescribeStacks
+                Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
+
 Outputs:
   SiteUrl:
     Description: Open this.
@@ -225,3 +278,7 @@ Outputs:
     Value: !Ref FeedFunction
   DistributionId:
     Value: !Ref Distribution
+  GithubDeployRoleArn:
+    Condition: WithGithub
+    Description: Set this as the AWS_DEPLOY_ROLE_ARN repository variable.
+    Value: !GetAtt GithubDeployRole.Arn

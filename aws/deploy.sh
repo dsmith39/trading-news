@@ -3,6 +3,7 @@
 #
 #   ./aws/deploy.sh                          # site + scheduled feed (no LLM cost)
 #   ./aws/deploy.sh --domain nq.example.com  # custom hostname on Route 53
+#   ./aws/deploy.sh --github-repo owner/repo # add a scoped Actions deploy role
 #   ./aws/deploy.sh --schedule "cron(0/30 * ? * MON-FRI *)"
 #
 # Re-run it any time: it updates the stack, the Lambda code and the page.
@@ -15,6 +16,7 @@ SCHEDULE="cron(0/10 * ? * MON-FRI *)"
 DOMAIN=""
 ZONE_ID=""
 CERT_ARN=""
+GH_REPO=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -22,6 +24,7 @@ while [ $# -gt 0 ]; do
     --region)    REGION="$2"; shift 2 ;;
     --schedule)  SCHEDULE="$2"; shift 2 ;;
     --domain)    DOMAIN="$2"; shift 2 ;;
+    --github-repo) GH_REPO="$2"; shift 2 ;;
     --zone-id)   ZONE_ID="$2"; shift 2 ;;
     --cert)      CERT_ARN="$2"; shift 2 ;;
     -h|--help)   sed -n '2,10p' "$0"; exit 0 ;;
@@ -93,6 +96,7 @@ PARAMS=(ProjectName="$PROJECT" FeedSchedule="$SCHEDULE")
 if [ -n "$DOMAIN" ]; then
   PARAMS+=(DomainName="$DOMAIN" HostedZoneId="$ZONE_ID" CertificateArn="$CERT_ARN")
 fi
+[ -n "$GH_REPO" ] && PARAMS+=(GithubRepo="$GH_REPO")
 
 echo "==> stack: $PROJECT   region: $REGION"
 aws cloudformation deploy \
@@ -148,4 +152,9 @@ echo
 echo "  CloudFront takes a few minutes to go live the first time."
 [ -n "$DOMAIN" ] && echo "  Also reachable at $(out CloudFrontDomain) while DNS settles."
 echo "  Feeds refresh on: $SCHEDULE (UTC)"
+if [ -n "$GH_REPO" ]; then
+  echo
+  echo "  GitHub Actions deploy role created. Point the workflow at it with:"
+  echo "    gh variable set AWS_DEPLOY_ROLE_ARN --repo $GH_REPO --body \"$(out GithubDeployRoleArn)\""
+fi
 echo "  Tear it all down with: ./aws/destroy.sh --project $PROJECT --region $REGION"
