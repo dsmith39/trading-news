@@ -240,7 +240,18 @@ Resources:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
               StringLike:
-                token.actions.githubusercontent.com:sub: !Sub "repo:${GithubRepo}:*"
+                # Two shapes, because GitHub issues both. The classic subject is
+                # repo:owner/name:ref:..., but a repository with immutable ids
+                # enabled sends repo:owner@<ownerid>/name@<repoid>:ref:... so it
+                # survives a rename. Only the numeric ids are wildcarded, and
+                # GitHub logins cannot contain "@", so neither pattern widens
+                # this beyond the one repository.
+                token.actions.githubusercontent.com:sub:
+                  - !Sub "repo:${GithubRepo}:*"
+                  - !Sub
+                    - "repo:${Owner}@*/${Name}@*:*"
+                    - Owner: !Select [0, !Split ["/", !Ref GithubRepo]]
+                      Name: !Select [1, !Split ["/", !Ref GithubRepo]]
       Policies:
         - PolicyName: deploy
           PolicyDocument:
