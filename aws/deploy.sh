@@ -118,15 +118,7 @@ FEEDFN="$(out FeedFunction)"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 echo "==> packaging feed function"
-mkdir -p "$TMP/feed"
-cp aws/lambda/feed/index.mjs feed/core.mjs feed/sources.mjs "$TMP/feed/"
-# The Node 22 managed runtime ships the AWS SDK, but vendoring the one client we
-# use costs a few seconds and removes any dependency on that staying true.
-if command -v npm >/dev/null; then
-  ( cd "$TMP/feed" && npm install --silent --no-audit --no-fund --omit=dev @aws-sdk/client-s3 >/dev/null 2>&1 ) \
-    && echo "    vendored @aws-sdk/client-s3" \
-    || echo "    npm install failed - falling back to the runtime's bundled SDK"
-fi
+aws/package-feed.sh "$TMP/feed"
 ( cd "$TMP/feed" && zip -qr ../feed.zip . )
 echo "    $(du -h "$TMP/feed.zip" | cut -f1) zip"
 aws lambda update-function-code --region "$REGION" --function-name "$FEEDFN" \

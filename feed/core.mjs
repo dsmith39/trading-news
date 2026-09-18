@@ -3,7 +3,8 @@
  * by the AWS Lambda (aws/lambda/feed, writes to S3). No dependencies — Node's
  * built-in fetch only, so the Lambda zip is three files and nothing else.
  */
-import { RSS, QUERIES, googleNews, QUOTES, chartUrl } from "./sources.mjs";
+import { RSS, QUERIES, googleNews, chartUrl } from "./sources.mjs";
+import { INSTRUMENTS, SERIES, allSymbols, byKey } from "./instruments.mjs";
 
 const UA = "Mozilla/5.0 (compatible; nq-trading-os/1.0)";
 const MAX_AGE_H = 12;
@@ -84,7 +85,7 @@ const etOf = t => {
   return { min: (+p.hour % 24) * 60 + +p.minute, day: +p.day };
 };
 
-export function levelsFromNQ(c) {
+export function levelsFrom(c) {
   if (!c || !c.ts.length) return null;
   const { ts, quote } = c, today = etOf(ts[ts.length - 1]).day;
   let onH = -Infinity, onL = Infinity, pdH = -Infinity, pdL = Infinity, pdC = null;
@@ -103,30 +104,134 @@ export function levelsFromNQ(c) {
            ibh: t(ibH), ibl: t(ibL), vwap: t(vol ? pv / vol : undefined) };
 }
 
-export async function quotes() {
-  const out = {}; let nq = null, ok = 0;
-  for (const [k, sym] of Object.entries(QUOTES)) {
+/* A full option chain is a large download, so this list is deliberately short:
+   the index proxies answer "is this move already priced?", and the two most
+   headline-driven single names answer it for the megacaps. */
+export const OPTION_UNDERLYINGS = ["QQQ", "SPY", "NVDA", "TSLA"];
+
+const OCC = /^([A-Z]+)(\d{2})(\d{2})(\d{2})([CP])(\d{8})$/;
+
+/** Nearest-expiry at-the-money straddle -> the move the market is paying for. */
+export async function optionSummary(sym) {
+  let j;
+  try {
+    j = JSON.parse(await get(
+      "https://cdn.cboe.com/api/global/delayed_quotes/options/" + encodeURIComponent(sym) + ".json", 20000));
+  } catch (e) { log("  ! options " + sym + " \u2014 " + e.message); return null; }
+
+  const d = j.data || {};
+  const spot = d.current_price ?? d.close;
+  const rows = d.options || [];
+  if (!spot || !rows.length) return null;
+
+  const mid = o => {
+    const b = +o.bid || 0, a = +o.ask || 0;
+    return b && a ? (b + a) / 2 : (+o.last_trade_price || 0);
+  };
+  const byExpiry = new Map();
+  for (const o of rows) {
+    const m = OCC.exec(o.option || "");
+    if (!m) continue;
+    const [, , yy, mm, dd, cp, strike] = m;
+    const key = "20" + yy + "-" + mm + "-" + dd;
+    if (!byExpiry.has(key)) byExpiry.set(key, []);
+    byExpiry.get(key).push({ cp, strike: +strike / 1000, iv: +o.iv || 0, px: mid(o) });
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const expiries = [...byExpiry.keys()].filter(e => e >= today).sort();
+  if (!expiries.length) return null;
+
+  const near = (arr) => arr.reduce((best, o) =>
+    Math.abs(o.strike - spot) < Math.abs(best.strike - spot) ? o : best, arr[0]);
+
+  /* An expiry measured from one chain: the at-the-money straddle is what the
+     market charges to be wrong about direction, so it is the move being paid
+     for between now and then. */
+  const read = (exp) => {
+    const chain = byExpiry.get(exp) || [];
+    const calls = chain.filter(o => o.cp === "C"), puts = chain.filter(o => o.cp === "P");
+    if (!calls.length || !puts.length) return null;
+    const c = near(calls), p = near(puts);
+    const straddle = c.px + p.px;
+    if (!straddle) return null;
+    return {
+      expiry: exp,
+      days: Math.max(0, Math.round((Date.parse(exp + "T21:00:00Z") - Date.now()) / 86400000)),
+      strike: c.strike,
+      expectedMovePct: Math.round((straddle / spot) * 10000) / 100,
+      expectedMove: Math.round(straddle * 100) / 100,
+      atmIv: Math.round(((c.iv + p.iv) / 2) * 1000) / 10,
+      /* Puts dearer than calls the same distance out is the market paying up
+         for downside - the cheapest read on positioning there is. */
+      skew: Math.round((p.px - c.px) * 100) / 100,
+    };
+  };
+
+  /* Two different questions. The expiry dated today answers "how much further
+     can it go before the close"; the next one out answers "is this news already
+     priced", which is the one worth asking of a headline. */
+  const sameDay = expiries[0] === today ? read(today) : null;
+  const forward = read(expiries.find(e => e > today) || expiries[0]);
+  if (!forward && !sameDay) return null;
+  return { symbol: sym, spot, ...(forward || sameDay), today: sameDay || undefined };
+}
+
+/** Every instrument and context series, each with its own session levels. */
+export async function marketData() {
+  const syms = allSymbols();
+  /* Several keys can share a symbol - usdjpy the instrument and jpy the context
+     series are the same tape - so fetch each symbol once and fan it out. */
+  const bySymbol = new Map();
+  for (const [key, sym] of Object.entries(syms)) {
+    if (!bySymbol.has(sym)) bySymbol.set(sym, []);
+    bySymbol.get(sym).push(key);
+  }
+  const quotes = {}, levels = {}, charts = {};
+  let ok = 0;
+  for (const [sym, keys] of bySymbol) {
     try {
       const c = fromChart(JSON.parse(await get(chartUrl(sym))));
       if (!c || !Number.isFinite(c.last)) throw new Error("no price");
-      out[k] = { last: c.last, open: c.open, hi: c.hi, lo: c.lo };
-      if (k === "nq") nq = c;
+      for (const key of keys) {
+        quotes[key] = { last: c.last, open: c.open, hi: c.hi, lo: c.lo, sym };
+        charts[key] = c;
+      }
       ok++;
-    } catch (e) { log("  ! " + sym + " — " + e.message); }
+    } catch (e) { log("  ! " + sym + " \u2014 " + e.message); }
     await new Promise(r => setTimeout(r, 220));   // be polite; the endpoint rate-limits
   }
-  log("  " + ok + "/" + Object.keys(QUOTES).length + " quotes");
-  return { quotes: out, levels: nq ? levelsFromNQ(nq) : null };
+  /* Levels are derived from the same chart payload, so they cost no extra call. */
+  for (const i of INSTRUMENTS) {
+    const c = charts[i.key];
+    if (c) { const lv = levelsFrom(c); if (lv) levels[i.key] = lv; }
+  }
+  log("  " + ok + "/" + bySymbol.size + " symbols (" + Object.keys(quotes).length + " keys)");
+  return { quotes, levels };
+}
+
+export async function options() {
+  const out = {};
+  for (const sym of OPTION_UNDERLYINGS) {
+    const o = await optionSummary(sym);
+    if (o) out[sym] = o;
+    await new Promise(r => setTimeout(r, 400));
+  }
+  log("  " + Object.keys(out).length + "/" + OPTION_UNDERLYINGS.length + " option chains");
+  return out;
 }
 
 /** One snapshot, in the shape NQOS.loadSnapshot() eats. */
 export async function snapshot(extra) {
-  const [news, mkt] = await Promise.all([headlines(), quotes()]);
+  const [news, mkt, opts] = await Promise.all([headlines(), marketData(), options()]);
   return {
     stamp: new Date().toLocaleString("en-US", { timeZone: "America/New_York" }) + " ET",
     ts: Date.now(),
+    /* Quotes are keyed by instrument, so the old single-market shape is kept
+       alongside them: a page loaded moments before this deploy still reads. */
     quotes: mkt.quotes,
-    levels: mkt.levels || undefined,
+    levels: mkt.levels.nq || undefined,
+    instrumentLevels: mkt.levels,
+    options: opts,
     headlines: news,
     ...(extra || {})
   };

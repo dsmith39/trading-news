@@ -31,11 +31,8 @@ export const QUERIES = [
 export const googleNews = q =>
   "https://news.google.com/rss/search?q=" + encodeURIComponent(q) + "&hl=en-US&gl=US&ceid=US:en";
 
-/** Yahoo chart endpoints — free and key-free. Keys match the OS quote model. */
-export const QUOTES = {
-  nq:  "NQ=F",  es: "ES=F",     rty: "RTY=F", vx: "^VIX",
-  tnx: "^TNX",  dxy: "DX-Y.NYB", gc: "GC=F",  cl: "CL=F", btc: "BTC-USD"
-};
+/* Symbols now live in instruments.mjs, which also declares what moves each
+   market. chartUrl is shared by every one of them. */
 export const chartUrl = (sym, range = "2d", interval = "5m") =>
   "https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(sym) +
   "?range=" + range + "&interval=" + interval + "&includePrePost=true";

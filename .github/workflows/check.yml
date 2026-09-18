@@ -45,6 +45,16 @@ jobs:
           node --check /tmp/os.js
           echo "ok   os/index.html"
 
+      - name: The feed function packages with everything it imports
+        run: |
+          set -euo pipefail
+          aws/package-feed.sh /tmp/pkg
+          node --input-type=module -e '
+            const m = await import("file:///tmp/pkg/index.mjs");
+            if (typeof m.handler !== "function") { console.error("no handler export"); process.exit(1); }
+          '
+          echo "ok   lambda package imports cleanly"
+
       - name: Shell scripts parse
         run: |
           set -euo pipefail

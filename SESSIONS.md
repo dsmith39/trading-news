@@ -42,6 +42,7 @@ Live at **https://nq.nightowltradinggroup.com**.
 | `40941e3` | Keep an expanded News headline expanded — state held in the DOM was wiped by the two-second redraw (PR #3) |
 | `02e4024` | This log, and the rule in `CLAUDE.md` to keep it updated (PR #4) |
 | `PR #5` | Correcting this table, which recorded two PRs as open and was wrong within the minute |
+| `PR #6` | Read sixteen markets, not one — futures, FX, crypto, single stocks — plus options expected-move, and one shared Lambda packager |
 
 ### Decisions worth remembering
 
@@ -79,6 +80,42 @@ Five of the six were only visible in production or from outside the code.
 The fourth is the one that mattered: session structure weights VWAP more than
 anything else it looks at, so the score was partly reading fiction. In daylight
 it would have looked fine.
+
+### Reading more than one market
+
+The scorer's own numbers made the case: on 58 live headlines, **54 scored zero**
+and two of the four that scored were wrong-signed. The news factor carried the
+largest weight (24%) while reading almost nothing. Two of its misses were BOJ
+stories — which matter to the Nasdaq through the yen carry trade, so the fault
+was never that Japan is irrelevant, it was that a keyword list reads words and
+not sentences. "Stocks rise, yen weakens as BOJ split-vote hike tempers hawkish"
+scored −46 on `hike` and `hawkish` alone.
+
+`feed/instruments.mjs` now declares sixteen markets and, for each, a `drivers`
+map saying which series move it and in which direction: a weaker yen lifts the
+Nikkei, a weaker dollar lifts crude and bitcoin, rising yields press the Nasdaq.
+That is what lets one engine serve several markets rather than one.
+
+Options come from **CBOE's free delayed endpoint**. Yahoo's options API now
+returns `Invalid Crumb` — an anti-scraping gate — and was rejected as a
+load-bearing dependency for that reason; its chart endpoint is unaffected. Each
+chain yields the at-the-money straddle, which is the move the market is paying
+for. Two expiries are reported for two different questions: the one dated today
+answers "how much further before the close", the next one out answers "is this
+already priced", which is the one worth asking of a headline.
+
+### Traps found this round
+
+- **The Lambda package's file list lived in two places.** `core.mjs` gained an
+  import; `deploy.sh` and the workflow each copied three named files. The zip
+  would have shipped without a module it imports, and nothing would have caught
+  it — `node --check` does not resolve imports. There is now one packager,
+  `aws/package-feed.sh`, used by the deploy, the workflow and a new CI step that
+  builds the package and imports it. Verified by building the old three-file
+  package and watching it fail on the missing module.
+- **Two instrument keys can share a symbol** — `usdjpy` the instrument and `jpy`
+  the context series are the same tape. Fetching per key made 21 calls for 19
+  symbols; it now fetches per symbol and fans out.
 
 ### Also worth knowing
 
