@@ -3,7 +3,7 @@
  * feed.json next to the OS in the site bucket. The browser then picks it up
  * on its own — no paste, no key, no server to keep alive.
  *
- * Env: SITE_BUCKET, ANALYST_URL (optional), FEED_KEY (default "feed.json")
+ * Env: SITE_BUCKET, FEED_KEY (default "feed.json")
  */
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { snapshot } from "./core.mjs";
@@ -13,9 +13,7 @@ const KEY = process.env.FEED_KEY || "feed.json";
 
 export const handler = async () => {
   const started = Date.now();
-  const snap = await snapshot(
-    process.env.ANALYST_URL ? { config: { analystUrl: process.env.ANALYST_URL } } : {}
-  );
+  const snap = await snapshot();
 
   /* A pull where every feed failed would blank the wire — keep the last good
      snapshot instead of publishing an empty one. */

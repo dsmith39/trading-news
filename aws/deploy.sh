@@ -2,7 +2,6 @@
 # Deploy NQ Trading OS to AWS. One command, no extra tooling beyond the AWS CLI.
 #
 #   ./aws/deploy.sh                          # site + scheduled feed (no LLM cost)
-#   ./aws/deploy.sh --key sk-ant-...         # also deploy the Analyst endpoint
 #   ./aws/deploy.sh --domain nq.example.com  # custom hostname on Route 53
 #   ./aws/deploy.sh --schedule "cron(0/30 * ? * MON-FRI *)"
 #
@@ -13,9 +12,6 @@ cd "$(dirname "$0")/.."
 PROJECT="nq-trading-os"
 REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"
 SCHEDULE="cron(0/10 * ? * MON-FRI *)"
-MODEL="claude-haiku-4-5"
-MAX_TOKENS="900"
-KEY=""
 DOMAIN=""
 ZONE_ID=""
 CERT_ARN=""
@@ -25,12 +21,9 @@ while [ $# -gt 0 ]; do
     --project)   PROJECT="$2"; shift 2 ;;
     --region)    REGION="$2"; shift 2 ;;
     --schedule)  SCHEDULE="$2"; shift 2 ;;
-    --key)       KEY="$2"; shift 2 ;;
     --domain)    DOMAIN="$2"; shift 2 ;;
     --zone-id)   ZONE_ID="$2"; shift 2 ;;
     --cert)      CERT_ARN="$2"; shift 2 ;;
-    --model)     MODEL="$2"; shift 2 ;;
-    --max-tokens) MAX_TOKENS="$2"; shift 2 ;;
     -h|--help)   sed -n '2,10p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 1 ;;
   esac
@@ -96,25 +89,9 @@ MSG
   echo "==> certificate: $CERT_ARN"
 fi
 
-# The analyst endpoint is public, so it carries a shared token. Keep the same
-# one across redeploys; CloudFormation cannot read a NoEcho parameter back.
-TOKEN=""
-TOKFILE="aws/.deploy-token"
-if [ -n "$KEY" ]; then
-  if [ -f "$TOKFILE" ]; then TOKEN="$(cat "$TOKFILE")"
-  else TOKEN="$(openssl rand -hex 16 2>/dev/null || head -c16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-       printf '%s' "$TOKEN" > "$TOKFILE"; chmod 600 "$TOKFILE"; fi
-fi
-
-# Only pass the analyst parameters when there is a key. Empty-string values are
-# awkward for `cloudformation deploy`, and the template already defaults them.
 PARAMS=(ProjectName="$PROJECT" FeedSchedule="$SCHEDULE")
 if [ -n "$DOMAIN" ]; then
   PARAMS+=(DomainName="$DOMAIN" HostedZoneId="$ZONE_ID" CertificateArn="$CERT_ARN")
-fi
-if [ -n "$KEY" ]; then
-  PARAMS+=(AnthropicApiKey="$KEY" AnalystModel="$MODEL" \
-           AnalystMaxTokens="$MAX_TOKENS" AnalystSharedToken="$TOKEN")
 fi
 
 echo "==> stack: $PROJECT   region: $REGION"
@@ -152,21 +129,8 @@ aws lambda update-function-code --region "$REGION" --function-name "$FEEDFN" \
   --zip-file "fileb://$TMP/feed.zip" --output text --query LastModified
 aws lambda wait function-updated --region "$REGION" --function-name "$FEEDFN"
 
-if [ -n "$KEY" ]; then
-  echo "==> packaging analyst function"
-  mkdir -p "$TMP/analyst"; cp aws/lambda/analyst/index.mjs "$TMP/analyst/"
-  ( cd "$TMP/analyst" && zip -qr ../analyst.zip . )
-  aws lambda update-function-code --region "$REGION" --function-name "${PROJECT}-analyst" \
-    --zip-file "fileb://$TMP/analyst.zip" --output text --query LastModified
-  aws lambda wait function-updated --region "$REGION" --function-name "${PROJECT}-analyst"
-  # The token lives in the page, which is only reachable over your CloudFront URL.
-  sed "s|__NQOS_TOKEN__|$TOKEN|" os/index.html > "$TMP/index.html"
-else
-  cp os/index.html "$TMP/index.html"
-fi
-
 echo "==> uploading the OS"
-aws s3 cp "$TMP/index.html" "s3://$BUCKET/index.html" --region "$REGION" \
+aws s3 cp os/index.html "s3://$BUCKET/index.html" --region "$REGION" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "public, max-age=60, must-revalidate" --only-show-errors
 
@@ -183,6 +147,5 @@ echo "  $SITE"
 echo
 echo "  CloudFront takes a few minutes to go live the first time."
 [ -n "$DOMAIN" ] && echo "  Also reachable at $(out CloudFrontDomain) while DNS settles."
-[ -n "$KEY" ] && echo "  Analyst: $(out AnalystEndpoint)  (model $MODEL, capped at $MAX_TOKENS tokens)"
 echo "  Feeds refresh on: $SCHEDULE (UTC)"
 echo "  Tear it all down with: ./aws/destroy.sh --project $PROJECT --region $REGION"

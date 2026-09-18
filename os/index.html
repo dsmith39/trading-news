@@ -805,7 +805,7 @@ const ICON={
   tape:'<svg viewBox="0 0 24 24"><path d="M4 20V9M9 20V4M14 20v-8M19 20v-5"/></svg>',
   book:'<svg viewBox="0 0 24 24"><path d="M4 4h7a2 2 0 012 2v14a2 2 0 00-2-2H4z"/><path d="M20 4h-7a2 2 0 00-2 2v14a2 2 0 012-2h7z"/></svg>',
   log:'<svg viewBox="0 0 24 24"><path d="M5 3h9l5 5v13H5z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>',
-  ai:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>',
+  brief:'<svg viewBox="0 0 24 24"><rect x="4" y="3" width="13" height="18" rx="1.5"/><path d="M8 8h5M8 12h5M8 16h3"/><path d="M17 12h4l-2-2m2 2l-2 2"/></svg>',
   gear:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>'
 };
 const APPS=[
@@ -815,7 +815,7 @@ const APPS=[
   {id:"tape",   name:"Tape",     icon:ICON.tape,  w:400,h:430,x:958,y:12},
   {id:"play",   name:"Playbook", icon:ICON.book,  w:430,h:420,x:60, y:180},
   {id:"jrnl",   name:"Journal",  icon:ICON.log,   w:520,h:430,x:120,y:150},
-  {id:"ai",     name:"Analyst",  icon:ICON.ai,    w:460,h:470,x:200,y:80},
+  {id:"brief",  name:"Brief",    icon:ICON.brief, w:520,h:520,x:200,y:80},
   {id:"set",    name:"Settings", icon:ICON.gear,  w:420,h:450,x:260,y:110}
 ];
 const wins={}; let zTop=10, focused=null;
@@ -951,11 +951,11 @@ R.signal=function(b){
      '<div class="note">Size scales with tier: stalk 1/3, engage 2/3, press full. Thresholds live in Settings.</div>';
 
   h+='<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn pri" id="sig-log">Log this read</button>'+
-     '<button class="btn" id="sig-ai">Ask the analyst</button></div>';
+     '<button class="btn" id="sig-brief">Build a prompt</button></div>';
   h+='</div>';
   b.innerHTML=h;
   $("#sig-log",b).onclick=()=>{ openApp("jrnl"); prefillJournal(s); };
-  $("#sig-ai",b).onclick=()=>{ openApp("ai"); askAnalyst("read"); };
+  $("#sig-brief",b).onclick=()=>{ briefCfg.ask="read"; openApp("brief"); };
 };
 
 /* --------------------------------------------------------------- WIRE */
@@ -1237,135 +1237,194 @@ R.jrnl=function(b){
     state.journal=state.journal.filter(r=>r.id!==n.dataset.del); await saveJournal(); renderApp("jrnl");});
 };
 
-/* ------------------------------------------------------------ ANALYST */
-let sampleFn=null, sampleState="probing", chat=[], busy=false, abort=null, analystUrl=null;
-/* deploy.sh substitutes the shared token here; untouched, it stays empty */
-const RAW_TOKEN="__NQOS_TOKEN__";
-const ANALYST_TOKEN=/^_{2}NQOS/.test(RAW_TOKEN)?"":RAW_TOKEN;
-
-/* artifact viewer: Claude answers on the viewer's own account */
-(async()=>{ let f=null;
-  try{ f=await (window.claude&&window.claude.use?window.claude.use("sample"):null);}catch(e){}
-  if(f&&!sampleFn) sampleFn=f;
-  if(sampleState==="probing") sampleState=sampleFn?"ready":"off";
-  if(wins.ai)renderApp("ai"); })();
-
-/* self-hosted: a Lambda behind the feed does the same job over HTTP */
-function useRemoteAnalyst(url){
-  if(!url||analystUrl===url||sampleFn) return;
-  analystUrl=url;
-  sampleFn=async(input,opts)=>{
-    const r=await fetch(url,{method:"POST",headers:{"content-type":"application/json"},
-      body:JSON.stringify({prompt:String(input),token:ANALYST_TOKEN}),signal:opts&&opts.signal});
-    if(!r.ok){ const e=new Error("analyst");
-      e.code=r.status===429?"rate_limited":r.status===403?"not_granted":"upstream"; throw e; }
-    const j=await r.json(), text=j.text||"";
-    if(opts&&opts.onText) opts.onText({text,delta:text});
-    return {text,truncated:false};
-  };
-  sampleState="ready"; if(wins.ai&&!wins.ai.min) renderApp("ai");
-}
-
-function md(t){
-  return esc(t)
-    .replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")
-    .replace(/^\s*[-•]\s+(.*)$/gm,"<li>$1</li>")
-    .replace(/(<li>[\s\S]*?<\/li>)(?!\s*<li>)/g,"<ul>$1</ul>")
-    .replace(/\n{2,}/g,"<br><br>").replace(/\n/g,"<br>");
-}
-function briefing(){
-  const s=state.signal;
-  const top=state.wire.slice(0,10).map(w=>"- ["+(w.score>0?"+":"")+w.score+
-    (w.entity?" "+w.entity:"")+"] "+w.txt+" ("+w.src+", "+Math.round((Date.now()-w.ts)/60000)+"m ago)").join("\n");
-  const cal=calendar(2).flatMap(d=>d.events.filter(e=>e.impact>=2)
-    .map(e=>"- "+(d.offset?"tomorrow ":"today ")+hm(e.min)+" ET "+e.name+" (tier "+(4-e.impact)+")")).slice(0,10).join("\n");
-  return "CONTEXT (from an NQ futures decision-support console; numbers below are the console's own, "+
-    "the tape is simulated unless stated):\n"+
-    "Now: "+pad(s.t.h)+":"+pad(s.t.mi)+" ET, "+s.sess.name+" session. Front month "+s.contract+".\n"+
-    "Composite bias "+(s.composite>0?"+":"")+s.composite+" (-100..+100), confidence "+s.conf+"%, verdict "+s.label+".\n"+
-    "Factors: "+s.factors.map(f=>f.name+" "+(f.score>0?"+":"")+f.score+" (w"+Math.round(f.w*100)+"%)").join(", ")+".\n"+
-    "Gates: "+(s.gates.length?s.gates.map(g=>g.t).join("; "):"none")+".\n"+
-    "Regime setting: "+(state.cfg.regime==="inverse"?"good news is bad news":"growth")+".\n"+
-    "Tape: NQ "+fmt(market.q.nq.last,2)+" ("+sgn(market.q.nq.pct)+"%), ES "+sgn(market.q.es.pct)+
-    "%, VIX "+fmt(market.q.vx.last,2)+" ("+sgn(market.q.vx.pct)+"%), US10Y "+fmt(market.q.tnx.last,3)+
-    " ("+sgn(market.q.tnx.pct)+"%), DXY "+sgn(market.q.dxy.pct)+"%.\n"+
-    "Levels: VWAP "+fmt(market.levels.vwap,2)+", ONH "+fmt(market.levels.onh,2)+", ONL "+fmt(market.levels.onl,2)+
-    ", PDH "+fmt(market.levels.pdh,2)+", PDL "+fmt(market.levels.pdl,2)+".\n"+
-    "Headlines on the wire:\n"+(top||"(none)")+"\n"+
-    "Scheduled catalysts:\n"+(cal||"(none)");
-}
-const PROMPTS={
-  read:"Give me your read on NQ right now. Say plainly whether this is a stand-aside or a trade, what the strongest "+
-       "argument on each side is, and what single thing would flip you. Be concrete about levels. 150 words.",
-  against:"Argue the opposite side of the console's current bias as convincingly as you can. What is the console's "+
-          "factor model most likely getting wrong right now? 120 words.",
-  next:"Brief me on the next scheduled catalyst: what the market is positioned for, how NQ typically behaves in the "+
-       "30 minutes either side of it, and how I should be positioned going in. 140 words.",
-  levels:"From the levels and the tape given, lay out the map for the rest of this session: the level that confirms "+
-         "an upside continuation, the level that confirms downside, and where the trade is simply not there. 130 words."
+/* -------------------------------------------------------------- BRIEF
+   No model runs in this OS. This app assembles everything the console knows
+   into one prompt you paste into Claude yourself — your model, your thinking
+   budget, your account, no key and no per-question cost.
+   -------------------------------------------------------------------- */
+const ASKS={
+  read:"Give me your read. Is this a stand-aside or a trade? Make the strongest case on each side, "+
+       "commit to one, and name the single thing that would flip you. Be specific about levels.",
+  next:"Brief me on the next scheduled catalyst: what the market is positioned for, how NQ typically "+
+       "behaves in the thirty minutes either side of it, and how I should be positioned going in.",
+  levels:"Map the rest of this session: the level that confirms upside continuation, the level that "+
+         "confirms downside, and the zone where there is simply no trade.",
+  against:"Argue against the console's bias as hard as you can. Which factor is most likely wrong right "+
+          "now, and what would the tape look like if it were?",
+  risk:"Critique my risk plan — the stop distance, the size, and where the first target sits relative to "+
+       "the structure. What am I not accounting for?",
+  none:""
 };
-async function askAnalyst(kind,custom){
-  if(!sampleFn||busy) return;
-  const q=custom||PROMPTS[kind]||PROMPTS.read;
-  chat.push({r:"u",t:q}); busy=true; renderApp("ai");
-  const msg={r:"a",t:""}; chat.push(msg);
-  abort=new AbortController();
-  try{
-    await sampleFn(
-      briefing()+"\n\nYou are a futures desk analyst talking to one trader. No preamble, no disclaimers, no "+
-      "bullet-point padding. Plain sentences, trader vocabulary, and a clear position. Never invent news or prices "+
-      "beyond what is given above.\n\nQUESTION: "+q,
-      {modelTier:"default",signal:abort.signal,
-       onText:({text})=>{msg.t=text; if(wins.ai&&!wins.ai.min)paintChat();}});
-  }catch(e){
-    msg.t=msg.t||("");
-    msg.err=e&&e.code==="not_granted"?"You declined the request, so the analyst is off for this visit."
-      :e&&e.code==="rate_limited"?"Too many requests in a row — give it a minute."
-      :(e&&(e.code==="cancelled"||e.name==="AbortError"))?"Stopped."
-      :e&&e.code==="upstream"?"The analyst endpoint returned an error \u2014 check its CloudWatch log."
-      :"The analyst could not answer ("+((e&&e.code)||"error")+").";
+const briefCfg={ask:"read",custom:"",wire:12,cal:true,play:true,jrnl:true,method:false};
+
+function buildPrompt(){
+  const s=state.signal, q=market.q, L=market.levels, c=state.cfg, P=[], nq=q.nq.last;
+  const push=(...x)=>P.push(...x);
+  const dist=v=>sgn(nq-v,0);
+
+  push("# NQ futures \u2014 desk brief",
+       "_"+s.t.key+" "+pad(s.t.h)+":"+pad(s.t.mi)+" ET \u00b7 generated by NQ Trading OS_","");
+
+  push("You are a futures desk analyst talking to one trader about Nasdaq-100 futures ("+s.contract+").",
+       "Everything below is the complete state of my console. Do not invent headlines, prices or levels "+
+       "beyond what is given here \u2014 if something you need is missing, say that instead of filling it in.",
+       "Plain sentences, trader vocabulary, no preamble and no disclaimers. Take a position.","");
+
+  push("**Data provenance.** "+(market.live
+    ? "Quotes and session levels are a real snapshot pulled "+(market.stamp||"recently")+
+      ", and the headlines are a real RSS pull."
+    : "The tape and levels are SIMULATED \u2014 a random walk anchored to a reference price \u2014 and the "+
+      "headlines are sample archetypes, not live news. Treat the numbers as a worked example rather than a "+
+      "real market, and say so if I ask you to act on them."),"");
+
+  push("## Clock",
+       "- Time: "+pad(s.t.h)+":"+pad(s.t.mi)+" ET",
+       "- Session: "+s.sess.name+" \u2014 "+s.sess.note,
+       "- Front month: "+s.contract+" ($20 per point, 0.25 tick = $5)","");
+
+  push("## What the console reads",
+       "- Composite bias: **"+(s.composite>0?"+":"")+s.composite+"** on a \u2212100..+100 scale",
+       "- Confidence: **"+s.conf+"%**",
+       "- Verdict: **"+s.label+"**",
+       "- Blocking gates: "+(s.gates.length?s.gates.map(g=>g.t+" ("+g.d+")").join("; "):"none"),"");
+
+  push("## Factors","| factor | weight | score | what it is reading |","|---|---|---|---|");
+  for(const f of s.factors)
+    push("| "+f.name+" | "+Math.round(f.w*100)+"% | "+(f.score>0?"+":"")+f.score+" | "+f.note+" |");
+  push("");
+
+  push("## Tape");
+  for(const k of ["nq","es","rty","vx","tnx","dxy","gc","cl","btc"]){
+    const x=q[k]; if(!x) continue;
+    push("- "+x.n+" "+fmt(x.last,x.d)+"  ("+sgn(x.chg)+", "+sgn(x.pct)+"%)"+(x.inv?"  [inverse to NQ]":""));
   }
-  busy=false; abort=null; renderApp("ai");
-}
-function paintChat(){
-  const b=wins.ai&&wins.ai.body, box=b&&$("#chatbox",b); if(!box)return;
-  box.innerHTML=chat.map(m=>'<div class="msg '+m.r+'"><div class="who">'+(m.r==="u"?"You":"Analyst")+'</div>'+
-    (m.r==="a"&&!m.t&&!m.err?'<span class="blink">Thinking</span>':md(m.t))+
-    (m.err?'<div class="note" style="margin-top:5px;color:var(--warn)">'+esc(m.err)+'</div>':'')+'</div>').join("");
-  box.scrollTop=box.scrollHeight;
-}
-R.ai=function(b){
-  let h='';
-  if(sampleState==="probing") h='<div class="empty">Connecting to the analyst…</div>';
-  else if(!sampleFn)
-    h='<div class="banner"><b>Offline</b><div>The analyst runs on Claude through the artifact viewer and is not '+
-      'available in this view. Everything else in the OS — scoring, the calendar, the factor model, the playbook '+
-      '— is computed in the page and still works.</div></div>';
-  else{
-    h='<div class="qb">'+
-      '<button class="btn pri" data-q="read">Read the tape</button>'+
-      '<button class="btn" data-q="next">Next catalyst</button>'+
-      '<button class="btn" data-q="levels">Level map</button>'+
-      '<button class="btn" data-q="against">Argue the other side</button>'+
-      (busy?'<button class="btn" id="ai-stop">Stop</button>':'')+
-      (chat.length?'<button class="btn" id="ai-clr">Clear</button>':'')+'</div>'+
-      '<div id="chatbox" style="max-height:calc(100% - 96px)">'+
-      (chat.length?'':'<div class="note">The analyst gets the whole console state — factor scores, gates, the '+
-       'wire, the calendar and the levels — and nothing else. It cannot browse, so it will not invent a headline '+
-       'that is not on your wire.</div>')+'</div>'+
-      '<div style="display:flex;gap:6px;margin-top:9px">'+
-      '<input type="text" id="ai-in" placeholder="Ask anything about this tape" autocomplete="off">'+
-      '<button class="btn pri" id="ai-go"'+(busy?" disabled":"")+'>Ask</button></div>';
+  push("- NQ\u2013ES spread: "+sgn(q.nq.pct-q.es.pct)+"% ("+(q.nq.pct>=q.es.pct?"NQ leading":"NQ lagging")+")","");
+
+  push("## Levels (distance from spot "+fmt(nq,2)+")");
+  for(const [n,v] of [["Prior day high",L.pdh],["Overnight high",L.onh],["Initial balance high",L.ibh],
+                      ["Session VWAP",L.vwap],["Prior day close",L.pdc],["Initial balance low",L.ibl],
+                      ["Overnight low",L.onl],["Prior day low",L.pdl]])
+    push("- "+n+": "+fmt(v,2)+"  ("+dist(v)+" pts)");
+  push("");
+
+  if(briefCfg.wire>0){
+    const rows=state.wire.slice(0,briefCfg.wire);
+    push("## Wire \u2014 newest first, scored \u2212100..+100 by the console's own keyword lexicon.",
+         "A score of **0 means no pattern matched**, not that the story is neutral \u2014 judge those "+
+         "headlines yourself, and tell me if the lexicon is missing something it should be catching.");
+    if(!rows.length) push("_nothing on the wire_");
+    for(const w of rows){
+      const mins=Math.round((Date.now()-w.ts)/60000);
+      push("- **["+(w.score>0?"+":"")+w.score+"]** "+w.txt+
+           "  \u2014 "+w.src+", "+(mins<60?mins+"m":Math.floor(mins/60)+"h")+" ago, tier "+(4-w.impact)+
+           ", "+(w.channel==="macro"?"rates":"risk")+" channel"+(w.entity?", "+w.entity:"")+(w.demo?" _(sample)_":""));
+    }
+    push("");
   }
+
+  if(briefCfg.cal){
+    push("## Scheduled catalysts");
+    let any=false;
+    for(const day of calendar(2)) for(const e of day.events){
+      if(e.impact<2) continue;
+      const m=minsUntil(day.offset,e.min); any=true;
+      push("- "+(day.offset?"tomorrow":"today")+" "+hm(e.min)+" ET \u2014 **"+e.name+"** (tier "+(4-e.impact)+
+           ", "+(m<0?dur(-m)+" ago":"in "+dur(m))+"): "+e.det);
+    }
+    if(!any) push("_nothing above tier 3 in the next two days_");
+    push("");
+  }
+
+  if(briefCfg.play){
+    const sp=setups().map(x=>({...x,met:x.c.filter(k=>k.ok).length}));
+    const armed=sp.filter(x=>x.met===x.c.length), near=sp.filter(x=>x.met>0&&x.met<x.c.length)
+      .sort((a,b)=>(b.met/b.c.length)-(a.met/a.c.length)).slice(0,3);
+    push("## Playbook");
+    push("Armed (every condition met): "+(armed.length?armed.map(x=>x.n).join(", "):"none"));
+    for(const x of near)
+      push("- "+x.n+" \u2014 "+x.met+"/"+x.c.length+", missing: "+x.c.filter(k=>!k.ok).map(k=>k.txt).join("; "));
+    push("");
+  }
+
+  push("## My parameters",
+       "- Macro regime: "+(c.regime==="inverse"
+          ? "inflation \u2014 good economic news is bad for the index (the rates channel is inverted)"
+          : "growth \u2014 good economic news is good for the index"),
+       "- Instrument: "+c.instrument+" ($"+(c.instrument==="MNQ"?2:20)+" per point)",
+       "- Risk per trade: $"+fmt(c.riskPerTrade,0)+" \u00b7 stop "+c.stopPts+" pts \u00b7 suggested size "+
+         (s.size||0)+" contract"+(s.size===1?"":"s"),
+       "- I engage above |score| "+c.minScore+" and confidence "+c.minConf+"%","");
+
+  if(briefCfg.jrnl&&state.journal.length){
+    const closed=state.journal.filter(r=>r.pts!=null&&r.pts!=="");
+    const wins_=closed.filter(r=>+r.pts>0);
+    const avg=rs=>rs.length?Math.round(rs.reduce((a,r)=>a+Math.abs(r.score||0),0)/rs.length):null;
+    push("## My journal",
+         "- "+state.journal.length+" entries, "+closed.length+" closed"+
+         (closed.length?", net "+sgn(closed.reduce((a,r)=>a+ +r.pts,0),0)+" pts, "+
+          Math.round(wins_.length/closed.length*100)+"% win rate":""));
+    const w=avg(wins_), l=avg(closed.filter(r=>+r.pts<=0));
+    if(w!=null&&l!=null) push("- Mean |bias score| at entry: "+w+" on winners, "+l+" on losers");
+    push("");
+  }
+
+  if(briefCfg.method){
+    push("## How the console builds its number",
+         "Six factors, each scored \u2212100..+100 and weighted: news tape 24%, catalyst posture 16%, rates "+
+         "and dollar 18%, risk appetite 18%, session structure 14%, mega-cap torque 10%. The weighted sum is "+
+         "the bias score. Confidence is 45% factor agreement, 35% session liquidity, 20% tape freshness. "+
+         "Headline sentiment comes from a keyword lexicon split into a rates channel and a risk channel, "+
+         "recency-weighted on a 45-minute half-life and scaled by source tier. Gates (closed market, the "+
+         "window around a tier-1 print, pre-release compression, lunch chop, low confidence) override "+
+         "direction entirely and force a stand-down. Feel free to tell me the weighting is wrong.","");
+  }
+
+  const ask=briefCfg.ask==="custom"?briefCfg.custom.trim():ASKS[briefCfg.ask];
+  if(ask) push("## What I want from you",ask);
+  return P.join("\n");
+}
+
+R.brief=function(b){
+  const text=buildPrompt();
+  const opt=(k,lab,on)=>'<button class="btn'+(on?" on":"")+'" data-t="'+k+'">'+lab+'</button>';
+  let h='<div class="filters">'+
+    [["read","Read the tape"],["next","Next catalyst"],["levels","Level map"],
+     ["against","Argue the other side"],["risk","Critique my risk"],["none","Brief only"],["custom","My question"]]
+     .map(x=>'<button class="btn'+(briefCfg.ask===x[0]?" on":"")+'" data-a="'+x[0]+'">'+x[1]+'</button>').join("")+
+    '</div>';
+  if(briefCfg.ask==="custom")
+    h+='<input type="text" id="bp-custom" placeholder="What do you want to ask about this tape?" value="'+
+       esc(briefCfg.custom)+'" style="margin-bottom:8px">';
+  h+='<div class="filters">'+
+    opt("cal","Calendar",briefCfg.cal)+opt("play","Playbook",briefCfg.play)+
+    opt("jrnl","Journal",briefCfg.jrnl)+opt("method","Methodology",briefCfg.method)+
+    '<button class="btn" data-w="-">Wire \u2212</button>'+
+    '<span class="chip">'+briefCfg.wire+' headlines</span>'+
+    '<button class="btn" data-w="+">Wire +</button></div>';
+  h+='<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">'+
+     '<button class="btn pri" id="bp-copy">Copy prompt</button>'+
+     '<span class="note" id="bp-msg">'+text.length.toLocaleString()+' characters \u00b7 roughly '+
+     Math.round(text.length/4).toLocaleString()+' tokens</span></div>';
+  h+='<textarea id="bp-out" readonly spellcheck="false" style="min-height:260px;height:calc(100% - 132px);'+
+     'font-family:var(--mono);font-size:11px;line-height:1.5"></textarea>';
   b.innerHTML=h;
-  if(!sampleFn) return;
-  paintChat();
-  b.querySelectorAll("[data-q]").forEach(n=>n.onclick=()=>askAnalyst(n.dataset.q));
-  const inp=$("#ai-in",b), go=()=>{const v=inp.value.trim(); if(!v||busy)return; inp.value=""; askAnalyst(null,v);};
-  if($("#ai-go",b)) $("#ai-go",b).onclick=go;
-  if(inp) inp.onkeydown=e=>{if(e.key==="Enter")go();};
-  if($("#ai-stop",b)) $("#ai-stop",b).onclick=()=>{abort&&abort.abort();};
-  if($("#ai-clr",b)) $("#ai-clr",b).onclick=()=>{chat=[];renderApp("ai");};
+  $("#bp-out",b).value=text;
+
+  b.querySelectorAll("[data-a]").forEach(n=>n.onclick=()=>{briefCfg.ask=n.dataset.a;renderApp("brief");});
+  b.querySelectorAll("[data-t]").forEach(n=>n.onclick=()=>{briefCfg[n.dataset.t]=!briefCfg[n.dataset.t];renderApp("brief");});
+  b.querySelectorAll("[data-w]").forEach(n=>n.onclick=()=>{
+    briefCfg.wire=clamp(briefCfg.wire+(n.dataset.w==="+"?6:-6),0,40); renderApp("brief");});
+  const ci=$("#bp-custom",b);
+  if(ci) ci.oninput=()=>{briefCfg.custom=ci.value; $("#bp-out",b).value=buildPrompt();};
+  $("#bp-copy",b).onclick=async()=>{
+    const ta=$("#bp-out",b), msg=$("#bp-msg",b);
+    let done=false;
+    try{ await navigator.clipboard.writeText(ta.value); done=true; }catch(e){}
+    if(!done){ try{ ta.focus(); ta.select(); done=document.execCommand("copy"); }catch(e){} }
+    msg.textContent=done?"Copied \u2014 paste it into Claude.":"Could not reach the clipboard. Select the text below and copy it.";
+    if(!done){ ta.focus(); ta.select(); }
+    setTimeout(()=>{ if(wins.brief&&!wins.brief.min) renderApp("brief"); },2600);
+  };
 };
 
 /* ----------------------------------------------------------- SETTINGS */
@@ -1527,7 +1586,6 @@ async function pollFeed(){
     if(!r.ok) return false;
     const snap=await r.json();
     if(!snap||(!snap.quotes&&!snap.headlines)) return false;
-    if(snap.config&&snap.config.analystUrl) useRemoteAnalyst(snap.config.analystUrl);
     if(snap.ts!==lastFeedTs){ lastFeedTs=snap.ts; loadSnapshot(snap); }
     selfHosted=true; return true;
   }catch(e){ return false; }

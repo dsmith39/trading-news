@@ -39,29 +39,8 @@ Parameters:
     Description: >
       ACM certificate covering DomainName. Must live in us-east-1 — CloudFront
       accepts certificates from no other region. deploy.sh finds it for you.
-  AnthropicApiKey:
-    Type: String
-    Default: ""
-    NoEcho: true
-    Description: >
-      Optional. Leave empty and the Analyst app stays dark and the stack has no
-      LLM cost at all. Provide a key and an analyst endpoint is deployed.
-  AnalystModel:
-    Type: String
-    Default: claude-haiku-4-5
-    Description: Model for the analyst endpoint. Haiku is the cheap default; swap for claude-sonnet-5 if you want deeper reads.
-  AnalystMaxTokens:
-    Type: Number
-    Default: 900
-    Description: Hard cap on response length — this is the main lever on analyst cost.
-  AnalystSharedToken:
-    Type: String
-    Default: ""
-    NoEcho: true
-    Description: Optional shared secret the page must send. deploy.sh generates one for you.
 
 Conditions:
-  WithAnalyst: !Not [!Equals [!Ref AnthropicApiKey, ""]]
   WithDomain: !Not [!Equals [!Ref DomainName, ""]]
 
 Resources:
@@ -207,7 +186,6 @@ Resources:
       Environment:
         Variables:
           SITE_BUCKET: !Ref SiteBucket
-          ANALYST_URL: !If [WithAnalyst, !GetAtt AnalystUrl.FunctionUrl, ""]
       Code:
         ZipFile: |
           exports.handler = async () => ({ statusCode: 200, body: "placeholder - run deploy.sh" });
@@ -231,77 +209,6 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt FeedSchedulerRule.Arn
 
-  # ------------------------------------------------- analyst (optional)
-  AnalystLogGroup:
-    Type: AWS::Logs::LogGroup
-    Condition: WithAnalyst
-    DeletionPolicy: Delete
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${ProjectName}-analyst"
-      RetentionInDays: !Ref LogRetentionDays
-
-  AnalystRole:
-    Type: AWS::IAM::Role
-    Condition: WithAnalyst
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal: { Service: lambda.amazonaws.com }
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: logs
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: [logs:CreateLogStream, logs:PutLogEvents]
-                Resource: !Sub "${AnalystLogGroup.Arn}:*"
-
-  AnalystFunction:
-    Type: AWS::Lambda::Function
-    Condition: WithAnalyst
-    DependsOn: AnalystLogGroup
-    Properties:
-      FunctionName: !Sub "${ProjectName}-analyst"
-      Runtime: nodejs22.x
-      Handler: index.handler
-      Role: !GetAtt AnalystRole.Arn
-      Timeout: 60
-      MemorySize: 256
-      Architectures: [arm64]
-      Environment:
-        Variables:
-          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
-          MODEL: !Ref AnalystModel
-          MAX_TOKENS: !Ref AnalystMaxTokens
-          SHARED_TOKEN: !Ref AnalystSharedToken
-      Code:
-        ZipFile: |
-          exports.handler = async () => ({ statusCode: 200, body: "placeholder - run deploy.sh" });
-
-  AnalystUrl:
-    Type: AWS::Lambda::Url
-    Condition: WithAnalyst
-    Properties:
-      TargetFunctionArn: !GetAtt AnalystFunction.Arn
-      AuthType: NONE
-      Cors:
-        AllowOrigins: ["*"]
-        AllowMethods: [POST]
-        AllowHeaders: [content-type]
-        MaxAge: 86400
-
-  AnalystUrlPermission:
-    Type: AWS::Lambda::Permission
-    Condition: WithAnalyst
-    Properties:
-      FunctionName: !GetAtt AnalystFunction.Arn
-      Action: lambda:InvokeFunctionUrl
-      Principal: "*"
-      FunctionUrlAuthType: NONE
-
 Outputs:
   SiteUrl:
     Description: Open this.
@@ -318,6 +225,3 @@ Outputs:
     Value: !Ref FeedFunction
   DistributionId:
     Value: !Ref Distribution
-  AnalystEndpoint:
-    Condition: WithAnalyst
-    Value: !GetAtt AnalystUrl.FunctionUrl

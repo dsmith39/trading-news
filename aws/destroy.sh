@@ -25,5 +25,4 @@ fi
 echo "==> deleting stack (CloudFront takes a few minutes to release)"
 aws cloudformation delete-stack --region "$REGION" --stack-name "$PROJECT"
 aws cloudformation wait stack-delete-complete --region "$REGION" --stack-name "$PROJECT"
-rm -f aws/.deploy-token
 echo "done - nothing left running."
