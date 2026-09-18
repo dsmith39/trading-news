@@ -42,7 +42,8 @@ Live at **https://nq.nightowltradinggroup.com**.
 | `40941e3` | Keep an expanded News headline expanded — state held in the DOM was wiped by the two-second redraw (PR #3) |
 | `02e4024` | This log, and the rule in `CLAUDE.md` to keep it updated (PR #4) |
 | `PR #5` | Correcting this table, which recorded two PRs as open and was wrong within the minute |
-| `PR #6` | Read sixteen markets, not one — futures, FX, crypto, single stocks — plus options expected-move, and one shared Lambda packager |
+| `9e3210a` | Read sixteen markets, not one — futures, FX, crypto, single stocks — plus options expected-move, and one shared Lambda packager (PR #6) |
+| `PR #7` | The console reads them: market picker, driver-based factors, news weighted by how much it could read, options panel |
 
 ### Decisions worth remembering
 
@@ -103,6 +104,37 @@ chain yields the at-the-money straddle, which is the move the market is paying
 for. Two expiries are reported for two different questions: the one dated today
 answers "how much further before the close", the next one out answers "is this
 already priced", which is the one worth asking of a headline.
+
+### One engine, sixteen markets
+
+The console now reads whichever market is picked, and the factor model is built
+from each instrument's `drivers` map rather than hardcoded to the Nasdaq. What
+that produces is per-market rather than relabelled: the Nikkei's rates factor
+reads "the yen (up = weaker yen) +0.44% (helps) · the US borrowing rate +1.07%
+(hurts)" and explains the carry trade underneath, while the euro drops the mood
+and company factors entirely because it has neither a volatility driver nor a
+partner market. Weights re-spread to sum to one whenever a factor is dropped or
+scaled, so losing an input cannot quietly shrink every score.
+
+**The news factor's weight now scales with how much of the wire it could
+actually read.** Measured on the live feed it falls to 4% for the Nikkei, crude,
+gold and crypto — where it scored almost nothing — and holds its full 24% for
+the euro, where it read well. Counting silence as "neutral" was letting the
+largest-weighted input speak with authority it had not earned.
+
+### Options, and the one question they answer cheaply
+
+The at-the-money straddle is what the market charges to be wrong about
+direction, so it is the move being paid for. Comparing it with what has already
+happened answers "is this news already in the price?".
+
+The first version of that gate was wrong and the numbers caught it. It compared
+the day's move against the straddle expiring **today** — which prices only the
+minutes still left and decays toward zero, so it fired on four of sixteen
+markets and would have fired nearly every afternoon. Against the forward expiry
+it behaves: Tesla at 1.49% against ±2.04% priced correctly stops firing, while
+the Nasdaq at 1.06% against ±0.68% correctly still does. Comparing like with
+like was the whole fix.
 
 ### Traps found this round
 
