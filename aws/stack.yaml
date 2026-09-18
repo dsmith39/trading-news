@@ -267,7 +267,10 @@ Resources:
                 Action: cloudfront:CreateInvalidation
                 Resource: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
               - Effect: Allow
-                Action: [lambda:UpdateFunctionCode, lambda:GetFunction, lambda:InvokeFunction]
+                # GetFunctionConfiguration is what `aws lambda wait
+                # function-updated` polls - GetFunction is not enough.
+                Action: [lambda:UpdateFunctionCode, lambda:GetFunction,
+                         lambda:GetFunctionConfiguration, lambda:InvokeFunction]
                 Resource: !GetAtt FeedFunction.Arn
               - Effect: Allow
                 Action: cloudformation:DescribeStacks
