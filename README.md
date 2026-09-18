@@ -72,6 +72,9 @@ That replaces the simulated tape with real quotes, real session levels
 (overnight high/low, prior day range, initial balance, VWAP computed from the
 5-minute bars) and a real wire. The snapshot is stored, so it survives a reload.
 
+If you deploy to AWS (below), skip all of this — the OS reads its own feed and
+refreshes itself.
+
 **Sources — all free, no API key:**
 
 - Federal Reserve press releases and speeches, BLS releases, Treasury releases
@@ -81,20 +84,126 @@ That replaces the simulated tape with real quotes, real session levels
 - Yahoo Finance chart endpoints for NQ=F, ES=F, RTY=F, ^VIX, ^TNX, DX-Y.NYB,
   GC=F, CL=F, BTC-USD
 
-Feeds that block or rate-limit are skipped with a note and the rest still land.
-Re-run it whenever you want a fresh read; there is nothing to schedule and
-nothing leaves your machine.
+A pull that reaches every source returns around 90 fresh headlines and all nine
+quotes. Feeds that block or rate-limit are skipped with a note and the rest
+still land, so one bad source never blanks the wire.
+
+---
+
+## Run it on AWS
+
+The published Artifact runs in a sandbox that cannot make cross-origin requests,
+so it can never fetch a feed itself. On AWS the server does the fetching, and
+the OS just reads a file next to itself — **no pasting, always current, and it
+works from your phone**.
+
+```bash
+./aws/deploy.sh                    # site + scheduled feed
+./aws/deploy.sh --key sk-ant-...   # ...and the Analyst endpoint
+```
+
+One command. It creates the stack, packages and ships both Lambdas, uploads the
+page, runs the first feed pull, and prints your URL. Re-run it any time to
+update. `./aws/destroy.sh` removes everything.
+
+### Architecture
+
+```
+EventBridge (every 10 min, weekdays)
+      │
+      ▼
+  Lambda  ── free RSS + Yahoo chart endpoints ──▶  feed.json ──▶ S3
+  (arm64, ~20s)                                                   │
+                                                                  ▼
+                                              CloudFront ──▶  your browser
+                                                   ▲              │
+                                   (optional) Lambda Function URL ─┘
+                                              └─ Claude API, for the Analyst
+```
+
+No load balancer, no NAT gateway, no database, no container, nothing running
+between pulls. That is the whole reason it costs nothing.
+
+### What it costs
+
+At personal usage — one or two viewers, a feed pull every 10 minutes on
+weekdays (~3,200 runs a month):
+
+| Service | Usage | Monthly |
+|---|---|---|
+| S3 | ~250 KB stored, a few thousand requests | under $0.01 |
+| CloudFront | well inside the perpetual free tier (1 TB out, 10M requests) | $0.00 |
+| Lambda — feed | ~3,200 runs × ~20s × 512 MB arm64 ≈ 33,000 GB-s, against a 400,000 GB-s free tier | $0.00 |
+| EventBridge | ~3,200 scheduled invocations | under $0.01 |
+| CloudWatch Logs | a few MB at 14-day retention, against a 5 GB free tier | $0.00 |
+| **Total** | | **effectively $0** |
+
+The CloudFront, Lambda, and CloudWatch Logs free tiers are perpetual, not
+12-month. S3's 5 GB free tier is 12-month only — after it lapses, 250 KB costs
+about $0.000006 a month. Worst realistic case if every free tier vanished:
+still well under a dollar.
+
+Two things would change that, and neither is on by default:
+
+- **A custom domain.** A Route 53 hosted zone is $0.50/month. The CloudFront
+  domain the deploy prints is free, so skip this unless you want a pretty URL.
+- **The Analyst.** Only deployed if you pass `--key`. It defaults to
+  `claude-haiku-4-5` ($1.00 / $5.00 per million input / output tokens) with
+  output capped at 900 tokens. A question sends roughly 2–3k tokens of console
+  state, so each one costs well under a cent — call it $0.50 for a hundred
+  questions in a month. Pass `--model claude-sonnet-5` ($2.00 / $10.00) if you
+  want sharper reads, or `--model claude-opus-5` for the best of them.
+
+Compare against the alternatives: Lightsail is $5/month, the smallest sensible
+EC2 instance plus its EBS volume is around $3–4/month, and both bill whether or
+not you look at the page. Static hosting plus a scheduled function is the
+cheapest shape that actually does the job.
+
+### Options
+
+```bash
+./aws/deploy.sh --region eu-west-1                       # anywhere you like
+./aws/deploy.sh --schedule "cron(0/30 13-21 ? * MON-FRI *)"  # US session only, half-hourly
+./aws/deploy.sh --model claude-sonnet-5 --max-tokens 1200    # a sharper analyst
+./aws/deploy.sh --project nq-os-test                     # a second, independent stack
+```
+
+Cheaper still: a wider schedule interval is the only dial that matters, and even
+every 10 minutes is free. Pick the cadence you actually want, not the one you
+think you can afford.
+
+### Security notes
+
+- The S3 bucket is fully private; only CloudFront can read it, through an
+  Origin Access Control.
+- The feed Lambda can write exactly one object — `feed.json` — and nothing else.
+- The Analyst endpoint is a public Function URL guarded by a shared token that
+  `deploy.sh` generates and bakes into the page. That is enough to stop drive-by
+  use, but the URL is not a secret: keep the output cap low, and set a billing
+  alarm on your Anthropic account if you care. Your API key stays in the
+  Lambda's environment and never reaches the browser.
+
 
 ---
 
 ## Layout
 
 ```
-os/index.html        the whole OS — one file, no build step, no dependencies
-feed/fetch-news.mjs  the fetcher: RSS + quotes + session levels -> data/feed.json
-feed/sources.mjs     source registry, tiers and endpoints
-data/feed.json       the snapshot you paste into the OS (git-ignored)
+os/index.html          the whole OS — one file, no build step, no dependencies
+feed/core.mjs          the fetch logic: RSS parsing, quotes, session levels
+feed/sources.mjs       source registry, tiers and endpoints
+feed/fetch-news.mjs    local CLI wrapper -> data/feed.json
+aws/stack.yaml         CloudFormation: S3 + CloudFront + scheduled Lambda
+aws/deploy.sh          one-command deploy; aws/destroy.sh removes it all
+aws/lambda/feed/       the scheduled fetcher (shares feed/core.mjs)
+aws/lambda/analyst/    optional Claude endpoint, only deployed with --key
+data/feed.json         the local snapshot (git-ignored)
 ```
+
+The same `os/index.html` runs in three places and adapts to each: as a published
+Artifact (Claude answers the Analyst on the viewer's own account), on AWS
+(serves its own `feed.json`, Analyst over HTTPS), and from any static server or
+`npm run serve`.
 
 `npm run serve` serves `os/` locally if you want to run it outside the Artifact
 viewer. The Analyst app needs the Artifact runtime, so it is off in that mode;

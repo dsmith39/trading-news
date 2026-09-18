@@ -265,7 +265,7 @@ tr:last-child td{border-bottom:0}
   padding:4px 0;border-bottom:1px solid var(--line-soft);align-items:center}
 .lvl .nm{font-family:var(--ui);font-size:11px;color:var(--ink-2)}
 .lvl .d{font-size:10px;color:var(--ink-3);text-align:right;min-width:52px}
-.ladder{position:relative;height:150px;border-left:1px solid var(--line);margin:8px 0 4px 54px}
+.ladder{position:relative;height:196px;border-left:1px solid var(--line);margin:8px 0 4px 54px}
 .ladder .lv{position:absolute;left:0;right:0;height:0;border-top:1px dashed var(--line)}
 .ladder .lv b{position:absolute;left:-54px;top:-7px;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);font-weight:400}
 .ladder .lv span{position:absolute;right:0;top:-14px;font-size:9.5px;letter-spacing:.08em;color:var(--ink-3)}
@@ -557,19 +557,19 @@ function scoreHeadline(text,regime){
    A live snapshot written by the repo fetcher replaces it wholesale.
    ===================================================================== */
 const SYMS=[
-  {k:"nq", n:"NQ",   lab:"Nasdaq 100",  px:24850, vol:11.0, d:2, inv:false},
-  {k:"es", n:"ES",   lab:"S&P 500",     px:6385,  vol:2.4,  d:2, inv:false},
-  {k:"rty",n:"RTY",  lab:"Russell 2000",px:2380,  vol:1.6,  d:1, inv:false},
-  {k:"vx", n:"VIX",  lab:"Volatility",  px:15.4,  vol:.10,  d:2, inv:true},
-  {k:"tnx",n:"US10Y",lab:"10Y Yield",   px:4.18,  vol:.012, d:3, inv:true},
-  {k:"dxy",n:"DXY",  lab:"Dollar",      px:98.6,  vol:.09,  d:2, inv:true},
-  {k:"gc", n:"GC",   lab:"Gold",        px:3410,  vol:4.2,  d:1, inv:false},
-  {k:"cl", n:"CL",   lab:"Crude",       px:67.4,  vol:.20,  d:2, inv:false},
-  {k:"btc",n:"BTC",  lab:"Bitcoin",     px:96500, vol:180,  d:0, inv:false}
+  {k:"nq", n:"NQ",   lab:"Nasdaq 100",  px:29700, vol:13.0, d:2, inv:false},
+  {k:"es", n:"ES",   lab:"S&P 500",     px:7700,  vol:2.9,  d:2, inv:false},
+  {k:"rty",n:"RTY",  lab:"Russell 2000",px:2890,  vol:1.9,  d:1, inv:false},
+  {k:"vx", n:"VIX",  lab:"Volatility",  px:15.5,  vol:.10,  d:2, inv:true},
+  {k:"tnx",n:"US10Y",lab:"10Y Yield",   px:4.95,  vol:.014, d:3, inv:true},
+  {k:"dxy",n:"DXY",  lab:"Dollar",      px:100.2, vol:.09,  d:2, inv:true},
+  {k:"gc", n:"GC",   lab:"Gold",        px:4390,  vol:5.4,  d:1, inv:false},
+  {k:"cl", n:"CL",   lab:"Crude",       px:101.1, vol:.28,  d:2, inv:false},
+  {k:"btc",n:"BTC",  lab:"Bitcoin",     px:77000, vol:160,  d:0, inv:false}
 ];
 const market={live:false,stamp:null,q:{}};
 function seedMarket(ref){
-  const scale=ref?ref/24850:1;
+  const scale=ref?ref/29700:1;
   for(const s of SYMS){
     const base=s.k==="nq"?(ref||s.px):(s.k==="es"?Math.round(s.px*scale*100)/100:s.px);
     market.q[s.k]={...s,px:base,open:base,last:base,chg:0,pct:0,hi:base,lo:base};
@@ -620,7 +620,7 @@ const SRC_TIER={Reuters:1,Bloomberg:1,WSJ:1,FT:1,CNBC:.85,MarketWatch:.8,"Federa
    STATE
    ===================================================================== */
 const DEFAULTS={
-  session:"night", regime:"growth", ref:24850, riskPerTrade:500, instrument:"NQ",
+  session:"night", regime:"growth", ref:29700, riskPerTrade:500, instrument:"NQ",
   stopPts:28, minScore:35, minConf:45
 };
 const state={
@@ -967,8 +967,8 @@ R.wire=function(b){
   let h='';
   if(state.wire.some(w=>w.demo))
     h+='<div class="banner"><b>Demo&nbsp;feed</b><div>These headlines are archetypes that show how the scorer '+
-       'reads each kind of story. Run <span class="mono">npm run feed</span> in the repo to push a real RSS '+
-       'pull (Reuters, CNBC, MarketWatch, the Fed) into this OS.</div></div>';
+       'reads each kind of story. Run <span class="mono">npm run feed</span> and load the result in Settings, '+
+       'or deploy to AWS (<span class="mono">./aws/deploy.sh</span>) and the OS refreshes itself.</div></div>';
   h+='<div class="filters">'+
      [["all","All"],["hi","Tier 1"],["bull","Bullish"],["bear","Bearish"],["mega","Top 7"]]
       .map(x=>'<button class="btn'+(wireFilter===x[0]?" on":"")+'" data-f="'+x[0]+'">'+x[1]+'</button>').join("")+
@@ -1070,7 +1070,9 @@ R.tape=function(b){
   h+='</div>';
 
   const vals=[L.pdh,L.onh,L.ibh,L.vwap,L.pdc,L.ibl,L.onl,L.pdl,nq];
-  const hi=Math.max(...vals)*1.0004, lo=Math.min(...vals)*0.9996, rng=hi-lo||1;
+  /* pad the domain so a tight cluster of levels still reads */
+  const raw=[Math.min(...vals),Math.max(...vals)], padv=Math.max((raw[1]-raw[0])*0.12,raw[1]*0.0006);
+  const hi=raw[1]+padv, lo=raw[0]-padv, rng=hi-lo||1;
   const pos=v=>((hi-v)/rng*100);
   const named=[["PDH",L.pdh],["ONH",L.onh],["IBH",L.ibh],["VWAP",L.vwap],["PDC",L.pdc],
                ["IBL",L.ibl],["ONL",L.onl],["PDL",L.pdl]];
@@ -1236,9 +1238,33 @@ R.jrnl=function(b){
 };
 
 /* ------------------------------------------------------------ ANALYST */
-let sampleFn=null, sampleState="probing", chat=[], busy=false, abort=null;
-(async()=>{ try{ sampleFn=await (window.claude&&window.claude.use?window.claude.use("sample"):null);}catch(e){}
-  sampleState=sampleFn?"ready":"off"; if(wins.ai)renderApp("ai"); })();
+let sampleFn=null, sampleState="probing", chat=[], busy=false, abort=null, analystUrl=null;
+/* deploy.sh substitutes the shared token here; untouched, it stays empty */
+const RAW_TOKEN="__NQOS_TOKEN__";
+const ANALYST_TOKEN=/^_{2}NQOS/.test(RAW_TOKEN)?"":RAW_TOKEN;
+
+/* artifact viewer: Claude answers on the viewer's own account */
+(async()=>{ let f=null;
+  try{ f=await (window.claude&&window.claude.use?window.claude.use("sample"):null);}catch(e){}
+  if(f&&!sampleFn) sampleFn=f;
+  if(sampleState==="probing") sampleState=sampleFn?"ready":"off";
+  if(wins.ai)renderApp("ai"); })();
+
+/* self-hosted: a Lambda behind the feed does the same job over HTTP */
+function useRemoteAnalyst(url){
+  if(!url||analystUrl===url||sampleFn) return;
+  analystUrl=url;
+  sampleFn=async(input,opts)=>{
+    const r=await fetch(url,{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({prompt:String(input),token:ANALYST_TOKEN}),signal:opts&&opts.signal});
+    if(!r.ok){ const e=new Error("analyst");
+      e.code=r.status===429?"rate_limited":r.status===403?"not_granted":"upstream"; throw e; }
+    const j=await r.json(), text=j.text||"";
+    if(opts&&opts.onText) opts.onText({text,delta:text});
+    return {text,truncated:false};
+  };
+  sampleState="ready"; if(wins.ai&&!wins.ai.min) renderApp("ai");
+}
 
 function md(t){
   return esc(t)
@@ -1295,7 +1321,9 @@ async function askAnalyst(kind,custom){
     msg.t=msg.t||("");
     msg.err=e&&e.code==="not_granted"?"You declined the request, so the analyst is off for this visit."
       :e&&e.code==="rate_limited"?"Too many requests in a row — give it a minute."
-      :e&&e.code==="cancelled"?"Stopped.":"The analyst could not answer ("+((e&&e.code)||"error")+").";
+      :(e&&(e.code==="cancelled"||e.name==="AbortError"))?"Stopped."
+      :e&&e.code==="upstream"?"The analyst endpoint returned an error \u2014 check its CloudWatch log."
+      :"The analyst could not answer ("+((e&&e.code)||"error")+").";
   }
   busy=false; abort=null; renderApp("ai");
 }
@@ -1375,7 +1403,12 @@ R.set=function(b){
       :state.storeMode==="local"
       ?"Journal and settings are in this browser only. They survive reloads but do not follow you to another device."
       :"Nothing is being persisted in this view — storage is unavailable here.")+'</div>';
-  h+='<hr class="sep"><div class="lab" style="margin-bottom:5px">Load a snapshot</div>'+
+  h+='<hr class="sep"><div class="lab" style="margin-bottom:5px">Feed</div>'+
+    (selfHosted
+      ?'<div class="note" style="margin-bottom:8px">This copy is serving its own '+
+       '<span class="mono">feed.json</span>, refreshed by a scheduled job and re-read every 90 seconds. '+
+       'Last pull: <b>'+esc(market.stamp||"\u2014")+'</b>. Nothing to paste.</div>'
+      :'')+
     '<div class="note" style="margin-bottom:6px">Run <span class="mono">npm run feed</span> in the repo and paste '+
     '<span class="mono">data/feed.json</span> here. It swaps the simulated tape for real quotes, real session '+
     'levels and a real wire \u2014 free RSS and free quote endpoints, no API key. A sandboxed page cannot fetch '+
@@ -1485,6 +1518,21 @@ function loadSnapshot(snap){
 }
 window.NQOS={loadSnapshot,state,computeSignal,scoreHeadline,calendar};
 
+/* When the OS is served next to a feed.json (the AWS deploy, or npm run serve
+   with a file there), it feeds itself and nothing has to be pasted. */
+let selfHosted=false, lastFeedTs=0;
+async function pollFeed(){
+  try{
+    const r=await fetch("feed.json",{cache:"no-store"});
+    if(!r.ok) return false;
+    const snap=await r.json();
+    if(!snap||(!snap.quotes&&!snap.headlines)) return false;
+    if(snap.config&&snap.config.analystUrl) useRemoteAnalyst(snap.config.analystUrl);
+    if(snap.ts!==lastFeedTs){ lastFeedTs=snap.ts; loadSnapshot(snap); }
+    selfHosted=true; return true;
+  }catch(e){ return false; }
+}
+
 /* =====================================================================
    LAYOUT
    ===================================================================== */
@@ -1556,8 +1604,12 @@ async function boot(){
     if(!market.live) seedMarket(state.cfg.ref); rescoreWire(); }
   const jr=await store.get("journal");
   if(jr&&Array.isArray(jr.rows)) state.journal=jr.rows;
-  const feed=await store.get("feed");
-  if(feed&&feed.stamp&&(Date.now()-(feed.ts||0)<6*3600e3)) loadSnapshot(feed);
+  if(await pollFeed()){
+    setInterval(pollFeed,90000);
+  }else{
+    const feed=await store.get("feed");
+    if(feed&&feed.stamp&&(Date.now()-(feed.ts||0)<6*3600e3)) loadSnapshot(feed);
+  }
   state.signal=computeSignal(); paintChrome(); renderAll(); paintDock();
 
   setInterval(()=>{ tickMarket(); state.signal=computeSignal(); paintChrome(); renderLive(); },2000);

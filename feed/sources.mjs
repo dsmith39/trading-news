@@ -4,15 +4,19 @@
  * itself, lower = aggregator or commentary.
  */
 export const RSS = [
-  { src: "Federal Reserve", tier: 1.0, url: "https://www.federalreserve.gov/feeds/press_all.xml" },
-  { src: "Federal Reserve", tier: 1.0, url: "https://www.federalreserve.gov/feeds/speeches.xml" },
-  { src: "BLS",             tier: 1.0, url: "https://www.bls.gov/feed/bls_latest.rss" },
-  { src: "Treasury",        tier: 1.0, url: "https://home.treasury.gov/news/press-releases/feed" },
+  { src: "Federal Reserve", tier: 1.00, url: "https://www.federalreserve.gov/feeds/press_all.xml" },
+  { src: "Federal Reserve", tier: 1.00, url: "https://www.federalreserve.gov/feeds/speeches.xml" },
+  { src: "SEC",             tier: 1.00, url: "https://www.sec.gov/news/pressreleases.rss" },
+  { src: "WSJ",             tier: 1.00, url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml" },
   { src: "CNBC",            tier: 0.85, url: "https://www.cnbc.com/id/100003114/device/rss/rss.html" },
   { src: "CNBC",            tier: 0.85, url: "https://www.cnbc.com/id/19854910/device/rss/rss.html" },
   { src: "MarketWatch",     tier: 0.80, url: "https://feeds.content.dowjones.io/public/rss/mw_topstories" },
-  { src: "Yahoo Finance",   tier: 0.70, url: "https://finance.yahoo.com/news/rssindex" }
+  { src: "Yahoo Finance",   tier: 0.70, url: "https://finance.yahoo.com/news/rssindex" },
+  { src: "Nasdaq",          tier: 0.70, url: "https://www.nasdaq.com/feed/rssoutbound?category=Markets" }
 ];
+/* Deliberately absent: bls.gov and home.treasury.gov. BLS blocks datacenter IPs
+   (so it 403s from Lambda) and Treasury's feed path no longer resolves. The
+   Google News queries below pick up the same releases within a minute or two. */
 
 /**
  * Google News search feeds. No key, no quota headaches, and they surface the
