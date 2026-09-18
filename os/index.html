@@ -5,7 +5,7 @@
 <meta name="theme-color" content="#DCE2EC" media="(prefers-color-scheme:light)">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="description" content="Decision-support console for Nasdaq-100 futures: news scoring, catalysts, session structure and sentiment.">
+<meta name="description" content="A plain-English dashboard for Nasdaq-100 futures: what the news is saying, what is scheduled, and whether today looks worth trading at all.">
 <title>NQ Trading OS</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -534,11 +534,11 @@ tr:last-child td{border-bottom:0}
 <div id="boot">
   <div class="bwrap">
     <div class="logo">NQ <b>TRADING OS</b></div>
-    <div class="sl">Nasdaq&#8209;100 Futures &#183; News, Catalysts &amp; Sentiment</div>
+    <div class="sl">Nasdaq&#8209;100 Futures &#183; The news, the diary and the mood, in plain English</div>
     <div class="ln" id="bootlog"></div>
     <div class="risk">
-      Decision-support software. Nothing here is investment advice, and no signal is a
-      recommendation to buy or sell. Futures carry substantial risk of loss.
+      This is a thinking tool, not financial advice. Nothing here is a recommendation to buy
+      or sell anything. Trading futures is risky: you can lose more than the money you put in.
     </div>
   </div>
 </div>
@@ -550,14 +550,14 @@ tr:last-child td{border-bottom:0}
     <div id="ticker"></div>
     <div id="clockbox">
       <span id="sessionpill">&#8212;</span>
-      <span id="feedpill" title="Where the numbers come from">DEMO</span>
-      <span class="mono" id="clock">--:--:--</span>
+      <span id="feedpill" title="Where the numbers come from">PRACTICE</span>
+      <span class="mono" id="clock" title="New York time — the clock the market runs on">--:--:--</span>
     </div>
   </header>
 
   <main id="desktop">
     <div id="grid"></div>
-    <div id="wallmark">NQ&#8202;&#183;&#8202;CME GLOBEX<br>0.25 TICK = $5.00<br>1 POINT = $20.00</div>
+    <div id="wallmark">NASDAQ&#8209;100 FUTURES<br>1 POINT UP OR DOWN = $20<br>SMALLEST MOVE = $5</div>
   </main>
 
   <nav id="dock" aria-label="Applications"></nav>
@@ -601,28 +601,33 @@ function et(d){
   o.key=o.y+"-"+pad(o.mo)+"-"+pad(o.d);
   return o;
 }
-const hm=m=>pad(Math.floor(m/60))+":"+pad(m%60);
+/* Times are shown the way people say them out loud: 9:30 am, not 09:30. */
+const h12=m=>{const h=Math.floor(m/60)%24; return (h%12===0?12:h%12)+":"+pad(m%60);};
+const mer=m=>(Math.floor(m/60)%24)<12?"am":"pm";
+const hm=m=>h12(m)+" "+mer(m);
 const dur=m=>{m=Math.round(m); const a=Math.abs(m);
   return a<90?m+" min":a<1440?Math.floor(a/60)+"h "+pad(a%60)+"m":(a/1440).toFixed(1)+" days";};
 
-/* Globex week: Sun 18:00 ET open -> Fri 17:00 ET close, daily halt 17:00-18:00 */
+/* The trading week runs from Sunday 6:00 pm New York to Friday 5:00 pm, with a
+   one-hour break every weekday afternoon. Everything below is in New York time. */
 function sessionOf(t){
-  if(t.dow===6) return {id:"closed",name:"Closed",note:"Weekend — CME Globex reopens Sunday 18:00 ET"};
-  if(t.dow===0) return t.min>=1080?{id:"globex",name:"Globex Open",note:"Sunday reopen — thin book, wide spreads"}
-                                  :{id:"closed",name:"Closed",note:"Weekend — CME Globex reopens Sunday 18:00 ET"};
-  if(t.min>=1020&&t.min<1080) return {id:"halt",name:"Daily Halt",note:"17:00–18:00 ET maintenance halt"};
-  if(t.dow===5&&t.min>=1020)  return {id:"closed",name:"Closed",note:"Week closed — reopens Sunday 18:00 ET"};
-  if(t.min>=1080||t.min<180)  return {id:"asia",name:"Asia",note:"Low participation — ranges hold, breakouts fail"};
-  if(t.min<480)               return {id:"london",name:"London",note:"European session — first real liquidity of the day"};
-  if(t.min<570)               return {id:"premkt",name:"Pre-Market",note:"08:00–09:30 ET — data window, positioning ahead of the cash open"};
-  if(t.min<585)               return {id:"open",name:"Cash Open",note:"09:30–09:45 ET — highest volume and highest noise of the day"};
-  if(t.min<630)               return {id:"ib",name:"Initial Balance",note:"09:45–10:30 ET — the day's opening range is being set"};
-  if(t.min<720)               return {id:"rth",name:"Morning RTH",note:"Trend leg most often develops here"};
-  if(t.min<810)               return {id:"lunch",name:"Lunch",note:"12:00–13:30 ET — liquidity drops, chop and false breaks"};
-  if(t.min<900)               return {id:"pm",name:"Afternoon",note:"Afternoon trend or drift into the close"};
-  if(t.min<960)               return {id:"mocwin",name:"Closing Hour",note:"15:00–16:00 ET — MOC imbalances, index rebalance flow"};
-  if(t.min<1020)              return {id:"post",name:"Post-Cash",note:"16:00–17:00 ET — earnings releases hit here"};
-  return {id:"globex",name:"Globex",note:"Overnight session"};
+  const weekend="It is the weekend. Trading starts again on Sunday at 6:00 pm New York time.";
+  if(t.dow===6) return {id:"closed",name:"Closed",note:weekend};
+  if(t.dow===0) return t.min>=1080?{id:"globex",name:"Overnight",note:"Sunday restart. Hardly anyone is trading yet, so prices can jump about on very little."}
+                                  :{id:"closed",name:"Closed",note:weekend};
+  if(t.min>=1020&&t.min<1080) return {id:"halt",name:"Daily break",note:"Trading pauses every weekday between 5:00 and 6:00 pm New York time."};
+  if(t.dow===5&&t.min>=1020)  return {id:"closed",name:"Closed",note:"The trading week has ended. It starts again on Sunday at 6:00 pm New York time."};
+  if(t.min>=1080||t.min<180)  return {id:"asia",name:"Overnight (Asia awake)",note:"Few people are trading. Prices tend to stay in a narrow band, and moves out of it rarely stick."};
+  if(t.min<480)               return {id:"london",name:"Early morning (Europe awake)",note:"Europe is trading, so this is the first genuinely busy stretch of the day."};
+  if(t.min<570)               return {id:"premkt",name:"Before the opening bell",note:"8:00–9:30 am. Economic reports come out and traders get into position before US shares start trading."};
+  if(t.min<585)               return {id:"open",name:"Opening bell",note:"9:30–9:45 am. The busiest and least predictable fifteen minutes of the day."};
+  if(t.min<630)               return {id:"ib",name:"First hour",note:"9:45–10:30 am. The high and low that the rest of the day gets measured against are being set now."};
+  if(t.min<720)               return {id:"rth",name:"Late morning",note:"If the day is going to move steadily in one direction, it usually starts here."};
+  if(t.min<810)               return {id:"lunch",name:"Lunchtime lull",note:"12:00–1:30 pm. Many traders step away, so moves are choppy and often turn out to be false starts."};
+  if(t.min<900)               return {id:"pm",name:"Afternoon",note:"The afternoon either carries on the morning's direction or drifts quietly towards the close."};
+  if(t.min<960)               return {id:"mocwin",name:"Final hour",note:"3:00–4:00 pm. Big funds put through their end-of-day orders, which can shift prices."};
+  if(t.min<1020)              return {id:"post",name:"After the bell",note:"4:00–5:00 pm. This is the window in which companies publish their results."};
+  return {id:"globex",name:"Overnight",note:"Overnight trading, with far fewer people involved than during the US day."};
 }
 
 /* front-month NQ contract (quarterly H M U Z, roll ~8d before 3rd Friday) */
@@ -652,44 +657,44 @@ function eventsFor(y,mo,d){
   if(w===0||w===6) return out;
   const add=(min,name,det,impact,tag)=>out.push({min,name,det,impact,tag});
 
-  /* daily session structure */
-  add(570,"Cash Open","NYSE/Nasdaq open — opening rotation, highest volume of the day",1,"session");
-  add(690,"EU Close","European cash close — frequent intraday inflection",1,"session");
-  add(960,"Cash Close","4:00 PM ET — MOC prints, then post-close earnings window",1,"session");
+  /* the shape of an ordinary day */
+  add(570,"US market opens","The opening bell in New York, and the busiest trading of the day.",1,"session");
+  add(690,"Europe closes","European markets shut for the day, which often turns prices here one way or the other.",1,"session");
+  add(960,"US market closes","4:00 pm. A rush of end-of-day orders, and then companies start publishing results.",1,"session");
 
   /* weekly */
-  if(w===4) add(510,"Initial Jobless Claims","Weekly labour proxy. Hot claims = cooling labour = lower yields",2,"macro");
-  if(w===3) add(630,"EIA Crude Inventories","Energy complex; matters to NQ only via the inflation channel",1,"macro");
-  if(w===4) add(990,"Fed Balance Sheet (H.4.1)","Liquidity trend — slow burn, not a scalp catalyst",1,"macro");
+  if(w===4) add(510,"Weekly unemployment claims","How many people filed for unemployment benefits last week. More claims means a cooling jobs market.",2,"macro");
+  if(w===3) add(630,"US oil stocks","How much oil the country is sitting on. It only matters here through its effect on inflation.",1,"macro");
+  if(w===4) add(990,"Fed balance sheet update","How much the US central bank is holding. A slow-moving trend rather than a same-day mover.",1,"macro");
 
   /* monthly */
-  if(d===bizDay(y,mo,1)) add(600,"ISM Manufacturing PMI","50 is the line. Growth read, moves rate expectations",2,"macro");
-  if(d===bizDay(y,mo,3)) add(600,"ISM Services PMI","~70% of the economy. Prices-paid sub-index is the market mover",2,"macro");
-  if(w===5&&nthDow(y,mo,5,1)===d) add(510,"Non-Farm Payrolls","Headline jobs + average hourly earnings. Tier-1 volatility event",3,"macro");
-  if(d>=10&&d<=13&&w>0&&w<6) add(510,"CPI","Core MoM is the number that matters. The single biggest scheduled NQ risk after FOMC",3,"macro");
-  if(d>=13&&d<=16&&w>0&&w<6) add(510,"PPI","Producer prices — feeds the following month's PCE estimate",2,"macro");
-  if(d>=15&&d<=17&&w>0&&w<6) add(510,"Retail Sales","Consumer demand; control group is the tracked line",2,"macro");
-  if(d===lastBizDay(y,mo)||d===lastBizDay(y,mo)-1) add(510,"Core PCE Price Index","The Fed's preferred gauge. Usually pre-telegraphed by CPI/PPI",3,"macro");
-  if(d===14||d===15) add(600,"U. Michigan Sentiment (prelim)","Inflation expectations sub-index is the tradeable line",1,"macro");
+  if(d===bizDay(y,mo,1)) add(600,"Factory survey","Factory bosses say whether business is picking up or slowing down. Above 50 means growing.",2,"macro");
+  if(d===bizDay(y,mo,3)) add(600,"Services survey","The same survey for service businesses, which are about seventy per cent of the economy.",2,"macro");
+  if(w===5&&nthDow(y,mo,5,1)===d) add(510,"Monthly jobs report","How many jobs the US added last month and how fast wages are rising. One of the two biggest days of the month.",3,"macro");
+  if(d>=10&&d<=13&&w>0&&w<6) add(510,"Inflation figures","How much prices rose last month. After the central bank's own meetings, the biggest scheduled risk there is.",3,"macro");
+  if(d>=13&&d<=16&&w>0&&w<6) add(510,"Wholesale prices","What businesses are charging each other. An early hint at next month's inflation figures.",2,"macro");
+  if(d>=15&&d<=17&&w>0&&w<6) add(510,"Retail sales","How much people spent in shops and online last month.",2,"macro");
+  if(d===lastBizDay(y,mo)||d===lastBizDay(y,mo)-1) add(510,"The inflation measure the Fed watches","The central bank steers by this one. It rarely surprises if the main inflation figures have already landed.",3,"macro");
+  if(d===14||d===15) add(600,"Household mood survey","How ordinary people feel about the economy, and how much inflation they expect over the next year.",1,"macro");
 
   /* FOMC cadence */
   if(FOMC_WEEK[mo]&&nthDow(y,mo,3,FOMC_WEEK[mo])===d){
-    add(840,"FOMC Rate Decision","Statement + dot plot on quarterly meetings. Confirm the exact date on the Fed calendar",3,"fed");
-    add(870,"Chair Press Conference","Historically the larger move of the two — the 14:30–15:15 window",3,"fed");
+    add(840,"Interest rate decision","The US central bank says whether it is raising, cutting or holding interest rates. Check the exact date on the Fed's own calendar.",3,"fed");
+    add(870,"Central bank press conference","The head of the Fed takes questions. This usually moves prices more than the decision itself did.",3,"fed");
   }
   /* opex / rebalance */
   if(w===5&&nthDow(y,mo,5,3)===d){
-    add(570,"Monthly Opex","Index and single-stock expiry — dealer gamma rolls off, pinning fades after the open",2,"flow");
-    if([3,6,9,12].includes(mo)) add(960,"Quad Witching","Quarterly futures + options expiry and index rebalance. Enormous closing volume",3,"flow");
+    add(570,"Monthly options expiry","A large batch of side bets on prices expires today, which can hold prices still and then let them go.",2,"flow");
+    if([3,6,9,12].includes(mo)) add(960,"Quarterly expiry day","Several kinds of contract expire at once and the index changes its line-up. Enormous trading into the close.",3,"flow");
   }
-  if(d===lastBizDay(y,mo)) add(900,"Month-End Rebalance","Pension/target-fund flows concentrated into the 15:00–16:00 window",2,"flow");
+  if(d===lastBizDay(y,mo)) add(900,"Month-end fund reshuffle","Pension and retirement funds rebalance what they hold, mostly between 3:00 and 4:00 pm.",2,"flow");
 
   /* mega-cap earnings season (post-close) */
   const wk=Math.ceil(d/7);
   if([1,4,7,10].includes(mo)&&wk>=4&&w>=2&&w<=4)
-    add(975,"Mega-Cap Earnings","Top-7 names are ~45% of NQ weight — one report can move the index 1%+",3,"earn");
+    add(975,"Big tech results","The seven largest companies are about forty-five per cent of this index, so one set of results can move the lot.",3,"earn");
   if([2,5,8,11].includes(mo)&&d>=18&&d<=28&&w===3)
-    add(980,"NVDA Earnings (window)","Single largest idiosyncratic NQ event outside FOMC",3,"earn");
+    add(980,"Nvidia results (likely window)","Outside the central bank, no single company's results move this index more.",3,"earn");
   return out;
 }
 function calendar(days){
@@ -768,16 +773,18 @@ function scoreHeadline(text,regime){
    SIMULATED random walk anchored to a reference price you set in Settings.
    A live snapshot written by the repo fetcher replaces it wholesale.
    ===================================================================== */
+/* `lab` is the plain name shown on screen, `n` the ticker traders use, and
+   `tip` the one-line explanation behind it. */
 const SYMS=[
-  {k:"nq", n:"NQ",   lab:"Nasdaq 100",  px:29700, vol:13.0, d:2, inv:false},
-  {k:"es", n:"ES",   lab:"S&P 500",     px:7700,  vol:2.9,  d:2, inv:false},
-  {k:"rty",n:"RTY",  lab:"Russell 2000",px:2890,  vol:1.9,  d:1, inv:false},
-  {k:"vx", n:"VIX",  lab:"Volatility",  px:15.5,  vol:.10,  d:2, inv:true},
-  {k:"tnx",n:"US10Y",lab:"10Y Yield",   px:4.95,  vol:.014, d:3, inv:true},
-  {k:"dxy",n:"DXY",  lab:"Dollar",      px:100.2, vol:.09,  d:2, inv:true},
-  {k:"gc", n:"GC",   lab:"Gold",        px:4390,  vol:5.4,  d:1, inv:false},
-  {k:"cl", n:"CL",   lab:"Crude",       px:101.1, vol:.28,  d:2, inv:false},
-  {k:"btc",n:"BTC",  lab:"Bitcoin",     px:77000, vol:160,  d:0, inv:false}
+  {k:"nq", n:"NQ",   lab:"Nasdaq 100",  tip:"The 100 biggest companies on the Nasdaq, mostly technology. This is the one the whole tool is about.", px:29700, vol:13.0, d:2, inv:false},
+  {k:"es", n:"ES",   lab:"S&P 500",     tip:"The 500 biggest US companies — the broad US market.", px:7700,  vol:2.9,  d:2, inv:false},
+  {k:"rty",n:"RTY",  lab:"Smaller firms",tip:"An index of 2,000 smaller US companies. It shows whether the rally reaches beyond the giants.", px:2890, vol:1.9, d:1, inv:false},
+  {k:"vx", n:"VIX",  lab:"Fear gauge",  tip:"How much turbulence traders expect over the next month. High means nervous.", px:15.5,  vol:.10,  d:2, inv:true},
+  {k:"tnx",n:"US10Y",lab:"Borrowing rate",tip:"What it costs the US government to borrow for ten years. When it rises, shares — tech most of all — usually fall.", px:4.95, vol:.014, d:3, inv:true},
+  {k:"dxy",n:"DXY",  lab:"US dollar",   tip:"The dollar against other big currencies. A strong dollar tends to weigh on US share prices.", px:100.2, vol:.09,  d:2, inv:true},
+  {k:"gc", n:"GC",   lab:"Gold",        tip:"Where money goes when people want somewhere safe to put it.", px:4390,  vol:5.4,  d:1, inv:false},
+  {k:"cl", n:"CL",   lab:"Oil",         tip:"The oil price feeds into inflation, which feeds into interest rates.", px:101.1, vol:.28,  d:2, inv:false},
+  {k:"btc",n:"BTC",  lab:"Bitcoin",     tip:"Often moves with tech shares, and moves first when people turn brave or cautious.", px:77000, vol:160,  d:0, inv:false}
 ];
 const market={live:false,stamp:null,q:{}};
 function seedMarket(ref){
@@ -890,64 +897,66 @@ function computeSignal(){
   const t=et(), sess=sessionOf(t), q=market.q, L=market.levels, F=[];
   const nq=q.nq.last;
 
-  /* 1 — news tape */
+  /* 1 — what the news is saying */
   const tape=tapeStats(240);
-  F.push({id:"tape",name:"News tape",w:.24,
+  F.push({id:"tape",name:"What the news is saying",w:.24,
     score:Math.round(clamp(tape.mean*1.2,-100,100)),
-    note:tape.n?tape.n+" stories in 4h, 45-min half-life · loudest: "+
-         (tape.top?tape.top.txt.slice(0,58)+"…":"—"):"No stories in the window"});
+    note:tape.n?tape.n+" stories in the last four hours, the newest counting for most · loudest: "+
+         (tape.top?tape.top.txt.slice(0,58)+"…":"—"):"Nothing has come in over the last four hours"});
 
   /* 2 — catalyst posture */
-  const nx=nextTier3(); let cScore=0,cNote="No tier-1 event inside the window";
+  const nx=nextTier3(); let cScore=0,cNote="Nothing major is due any time soon";
   if(nx){
-    if(nx.mins>0&&nx.mins<=90){cScore=0;cNote=nx.ev.name+" in "+dur(nx.mins)+" — direction is unknowable until it prints";}
+    if(nx.mins>0&&nx.mins<=90){cScore=0;cNote=nx.ev.name+" in "+dur(nx.mins)+" — nobody can know which way it will go until it lands";}
     else if(nx.mins<=0&&nx.mins>-90){
       const post=tapeStats(Math.max(8,-nx.mins),w=>w.channel==="macro"||w.impact===3);
       cScore=Math.round(clamp(post.mean*1.35,-100,100));
-      cNote=nx.ev.name+" printed "+dur(-nx.mins)+" ago — reading the reaction, not the number";
-    } else cNote=nx.ev.name+" in "+dur(nx.mins)+" — too far out to steer today’s trade";
+      cNote=nx.ev.name+" came out "+dur(-nx.mins)+" ago — this reads how people reacted, not the number itself";
+    } else cNote=nx.ev.name+" in "+dur(nx.mins)+" — too far off to change anything today";
   }
-  F.push({id:"cat",name:"Catalyst posture",w:.16,score:cScore,note:cNote});
+  F.push({id:"cat",name:"Big announcements due",w:.16,score:cScore,note:cNote});
 
-  /* 3 — rates & dollar (both inverse to NQ) */
+  /* 3 — interest rates and the dollar (this index usually falls when either rises) */
   const rd=clamp(-(q.tnx.pct*20+q.dxy.pct*26),-100,100);
-  F.push({id:"rates",name:"Rates & dollar",w:.18,score:Math.round(rd),
-    note:"US10Y "+sgn(q.tnx.pct)+"% · DXY "+sgn(q.dxy.pct)+"% — both trade inverse to the multiple"});
+  F.push({id:"rates",name:"Interest rates and the dollar",w:.18,score:Math.round(rd),
+    note:"Government borrowing rate "+sgn(q.tnx.pct)+"% · US dollar "+sgn(q.dxy.pct)+
+         "% — when either of these goes up, tech shares usually go down"});
 
   /* 4 — risk appetite */
   const lead=q.nq.pct-q.es.pct;
   const ra=clamp(-q.vx.pct*3.6+lead*38,-100,100);
-  F.push({id:"risk",name:"Risk appetite",w:.18,score:Math.round(ra),
-    note:"VIX "+fmt(q.vx.last,2)+" ("+sgn(q.vx.pct)+"%) · NQ "+(lead>=0?"leading":"lagging")+" ES by "+fmt(Math.abs(lead),2)+"%"});
+  F.push({id:"risk",name:"How brave the market feels",w:.18,score:Math.round(ra),
+    note:"Fear gauge at "+fmt(q.vx.last,2)+" ("+sgn(q.vx.pct)+"%) · tech is "+(lead>=0?"ahead of":"behind")+
+         " the wider US market by "+fmt(Math.abs(lead),2)+"% today"});
 
   /* 5 — session structure */
   let st=0, sn=[], haveLv=0;
   if(L.vwap!=null){ haveLv++;
-    if(nq>L.vwap){st+=26;sn.push("above VWAP");} else {st-=26;sn.push("below VWAP");} }
+    if(nq>L.vwap){st+=26;sn.push("above today's average price");} else {st-=26;sn.push("below today's average price");} }
   if(L.onh!=null&&L.onl!=null){ haveLv++;
-    if(nq>L.onh){st+=24;sn.push("above overnight high");}
-    else if(nq<L.onl){st-=24;sn.push("below overnight low");}
-    else sn.push("inside the overnight range"); }
+    if(nq>L.onh){st+=24;sn.push("above the overnight high");}
+    else if(nq<L.onl){st-=24;sn.push("below the overnight low");}
+    else sn.push("still inside the overnight range"); }
   if(L.pdh!=null&&L.pdl!=null){ haveLv++;
-    if(nq>L.pdh){st+=18;sn.push("above prior day high");}
-    else if(nq<L.pdl){st-=18;sn.push("below prior day low");} }
+    if(nq>L.pdh){st+=18;sn.push("above yesterday's high");}
+    else if(nq<L.pdl){st-=18;sn.push("below yesterday's low");} }
   if(L.pdc!=null){ haveLv++; st+=nq>L.pdc?10:-10;
-    sn.push(nq>L.pdc?"above prior day close":"below prior day close"); }
-  if(!haveLv) sn.push("no session levels in this feed yet, so structure sits out");
-  F.push({id:"struct",name:"Session structure",w:.14,score:Math.round(clamp(st,-100,100)),
+    sn.push(nq>L.pdc?"above where yesterday finished":"below where yesterday finished"); }
+  if(!haveLv) sn.push("today's high and low points have not been worked out yet, so this part sits out");
+  F.push({id:"struct",name:"Where the price sits today",w:.14,score:Math.round(clamp(st,-100,100)),
     note:sn.join(" · ")});
 
-  /* 6 — mega-cap torque */
+  /* 6 — the handful of giant companies that dominate the index */
   const mc=tapeStats(300,w=>!!w.entity);
   let mcScore=Math.round(clamp(mc.mean*1.15,-100,100));
-  F.push({id:"mega",name:"Mega-cap torque",w:.10,score:mcScore,
-    note:mc.n?mc.n+" top-weight stories · the top 7 names carry ~45% of index weight":
-              "Nothing on the top-weight names"});
+  F.push({id:"mega",name:"The giant companies",w:.10,score:mcScore,
+    note:mc.n?mc.n+" stories about the giants · the seven biggest are roughly 45% of this whole index":
+              "No news about the biggest companies"});
 
   /* composite */
   const composite=Math.round(F.reduce((a,f)=>a+f.score*f.w,0));
 
-  /* confidence: agreement + liquidity + data freshness */
+  /* how sure we are: do the six inputs agree, is anyone trading, is the news fresh */
   const dirs=F.filter(f=>Math.abs(f.score)>8).map(f=>Math.sign(f.score));
   const agree=dirs.length?Math.abs(dirs.reduce((a,b)=>a+b,0))/dirs.length*100:20;
   const LIQ={open:100,rth:92,ib:88,pm:80,mocwin:72,premkt:64,london:58,lunch:38,globex:32,asia:24,post:46,halt:0,closed:0};
@@ -957,23 +966,37 @@ function computeSignal(){
 
   /* hard gates */
   const gates=[];
-  if(sess.id==="closed"||sess.id==="halt") gates.push({t:"Market closed",d:sess.note});
+  if(sess.id==="closed"||sess.id==="halt") gates.push({t:"The market is shut",d:sess.note});
   if(nx&&nx.mins<=3&&nx.mins>=-6)
-    gates.push({t:"No-trade window",d:nx.ev.name+" — spreads widen and stops get run in both directions. Wait for the 5-minute close."});
+    gates.push({t:"News is landing right now",d:nx.ev.name+". Prices lurch both ways in the first minutes and it costs more to buy or sell. Give it five minutes to settle."});
   if(nx&&nx.mins>3&&nx.mins<=25)
-    gates.push({t:"Pre-release compression",d:nx.ev.name+" in "+dur(nx.mins)+". Volatility is being sold; breakouts in here fail."});
+    gates.push({t:"Everyone is waiting for the news",d:nx.ev.name+" in "+dur(nx.mins)+". Prices go quiet before a big number, and moves that start in this gap usually fizzle out."});
   if(sess.id==="lunch"&&Math.abs(composite)<35)
-    gates.push({t:"Lunch chop",d:"12:00–13:30 ET with no edge in the tape. Reversion beats continuation."});
-  if(conf<30) gates.push({t:"Low confidence",d:"Factors disagree or the tape is stale."});
+    gates.push({t:"Lunchtime drift",d:"It is the middle of the New York day and nothing in the news points either way. Prices are more likely to wander back than to run."});
+  if(conf<30) gates.push({t:"We are not confident",d:"The six inputs disagree with each other, or the news we have is too old to lean on."});
 
-  /* verdict ladder */
-  const a=Math.abs(composite); let tier,label,dir=composite>0?"LONG":"SHORT";
-  if(gates.length)        {tier=0;label="STAND DOWN";}
-  else if(a<state.cfg.minScore*0.5){tier=0;label="NO EDGE";}
-  else if(a<state.cfg.minScore)    {tier=1;label="STALK "+dir;}
-  else if(a<62)                    {tier=2;label="ENGAGE "+dir;}
-  else                             {tier=3;label="PRESS "+dir;}
-  if(tier>1&&conf<state.cfg.minConf) {tier=1;label="STALK "+dir;}
+  /* the verdict, in words rather than trading shorthand. `blurb` is the plain
+     sentence under the headline; `dir` says which way the evidence leans. */
+  const a=Math.abs(composite); let tier,label,blurb,dir=composite>0?"up":"down";
+  const way=composite>0?"rise":"fall";
+  const jargon=composite>0?"going long":"going short";
+  const setTier=t=>{
+    tier=t;
+    if(t===1){label="Watch, don't act"; blurb="The evidence leans towards prices going "+dir+
+      ", but not far enough to put money behind it yet.";}
+    else if(t===2){label="Leaning "+dir; blurb="On balance this points to prices going "+dir+
+      " from here. Traders would call a bet like that "+jargon+".";}
+    else {label="Strongly "+dir; blurb="Most of what we can see points the same way: towards prices going "+dir+
+      ". Traders would call a bet like that "+jargon+".";}
+  };
+  if(gates.length){tier=0;label="Sit this one out";
+    blurb="Something below says this is not a moment to be risking money, whatever the score says.";}
+  else if(a<state.cfg.minScore*0.5){tier=0;label="No clear signal";
+    blurb="Nothing is pointing strongly either way. Most hours of most days look like this, and doing nothing is a perfectly good answer.";}
+  else if(a<state.cfg.minScore)    setTier(1);
+  else if(a<62)                    setTier(2);
+  else                             setTier(3);
+  if(tier>1&&conf<state.cfg.minConf) setTier(1);
 
   /* sizing */
   const mult=state.cfg.instrument==="MNQ"?2:20;
@@ -981,7 +1004,7 @@ function computeSignal(){
   const sizeRaw=state.cfg.riskPerTrade/(stop*mult);
   const size=tier===0?0:Math.max(0,Math.floor(sizeRaw*(tier===1?.34:tier===2?.67:1)));
 
-  return {t,sess,factors:F,composite,conf,gates,tier,label,dir,size,stop,mult,
+  return {t,sess,factors:F,composite,conf,gates,tier,label,blurb,dir,size,stop,mult,
           next:nx,tape,contract:frontMonth(t)};
 }
 
@@ -1026,13 +1049,13 @@ const ICON={
   gear:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>'
 };
 const APPS=[
-  {id:"signal", name:"Signal",   icon:ICON.signal,w:450,h:530,x:14, y:12},
-  {id:"wire",   name:"Wire",     icon:ICON.wire,  w:470,h:440,x:476,y:12},
-  {id:"cat",    name:"Catalysts",icon:ICON.cal,   w:430,h:330,x:476,y:464},
-  {id:"tape",   name:"Tape",     icon:ICON.tape,  w:400,h:430,x:958,y:12},
-  {id:"play",   name:"Playbook", icon:ICON.book,  w:430,h:420,x:60, y:180},
+  {id:"signal", name:"Verdict",  icon:ICON.signal,w:450,h:560,x:14, y:12},
+  {id:"wire",   name:"News",     icon:ICON.wire,  w:470,h:440,x:476,y:12},
+  {id:"cat",    name:"Diary",    icon:ICON.cal,   w:430,h:330,x:476,y:464},
+  {id:"tape",   name:"Prices",   icon:ICON.tape,  w:400,h:430,x:958,y:12},
+  {id:"play",   name:"Patterns", icon:ICON.book,  w:430,h:420,x:60, y:180},
   {id:"jrnl",   name:"Journal",  icon:ICON.log,   w:520,h:430,x:120,y:150},
-  {id:"brief",  name:"Brief",    icon:ICON.brief, w:520,h:520,x:200,y:80},
+  {id:"brief",  name:"Ask Claude",icon:ICON.brief,w:520,h:520,x:200,y:80},
   {id:"set",    name:"Settings", icon:ICON.gear,  w:420,h:450,x:260,y:110}
 ];
 /* ---------------------------------------------------------- device mode
@@ -1251,8 +1274,8 @@ function paintStrip(pane,k,list){
   if(!list.length){
     host.hidden=true;
     if(!empty) pane.appendChild(el("div","pempty",
-      '<div class="note">Nothing open in this pane. Pick an app from the rail, or send one '+
-      'across with the arrows in the other pane.</div>'));
+      '<div class="note">Nothing open on this side. Pick something from the bar, or send a panel '+
+      'across using the arrows on the other side.</div>'));
     return;
   }
   host.hidden=false;
@@ -1338,7 +1361,11 @@ function renderApp(id){ const w=wins[id]; if(!w||!R[id])return;
    and caught up by showApp() the moment it comes back on screen. */
 function renderAll(){ for(const id in wins){ if(visible(wins[id])) renderApp(id); else wins[id].dirty=true; } }
 
-/* ------------------------------------------------------------- SIGNAL */
+/* "NQ" and "MNQ" are the codes on a broker's screen; on ours they get their
+   plain names, because nobody new to this knows what an M in front means. */
+const contractName=(k,n)=>(k==="MNQ"?"micro contract":"standard contract")+(n===1?"":"s");
+
+/* ------------------------------------------------------------ VERDICT */
 R.signal=function(b){
   const s=state.signal; if(!s){b.innerHTML="";return;}
   const dirc=s.tier===0?"stand":(s.composite>0?"l":"s");
@@ -1348,17 +1375,19 @@ R.signal=function(b){
 
   let h='<div class="stack">';
   h+='<div class="verdict '+dirc+'"><div class="rowsplit">'+
-     '<div><h2>'+s.label+'</h2><div class="sub">'+esc(s.sess.name)+' &#183; '+esc(s.contract)+
-     ' &#183; confidence '+s.conf+'%</div></div>'+
+     '<div><h2>'+esc(s.label)+'</h2><div class="sub">'+esc(s.sess.name)+' &#183; '+s.conf+'% sure</div></div>'+
      '<div style="text-align:right"><div class="scorebig '+cls(s.composite)+'">'+(s.composite>0?"+":"")+s.composite+'</div>'+
-     '<div class="lab" style="margin-top:2px">bias score</div></div></div>'+
-     '<div class="meter">'+bar(s.composite,col)+'</div></div>';
+     '<div class="lab" style="margin-top:2px">score</div></div></div>'+
+     '<div class="meter">'+bar(s.composite,col)+'</div>'+
+     '<div class="note" style="margin-top:7px;color:var(--ink-2)">'+esc(s.blurb)+'</div>'+
+     '<div class="note" style="margin-top:4px">The score runs from &#8722;100 (everything points down) to +100 '+
+     '(everything points up). The percentage next to it is how much the tool trusts its own reading right now.</div></div>';
 
   if(s.gates.length) for(const g of s.gates)
     h+='<div class="gate"><b>&#9888;</b><div><b>'+esc(g.t)+'</b> &#8212; '+esc(g.d)+'</div></div>';
-  else h+='<div class="gate ok"><b>&#10003;</b><div>No blocking condition. '+esc(s.sess.note)+'</div></div>';
+  else h+='<div class="gate ok"><b>&#10003;</b><div>Nothing is standing in the way. '+esc(s.sess.note)+'</div></div>';
 
-  h+='<div><div class="lab" style="margin-bottom:4px">What is driving it</div>';
+  h+='<div><div class="lab" style="margin-bottom:4px">What went into that score</div>';
   for(const f of s.factors){
     const c=f.score>0?"var(--long)":f.score<0?"var(--short)":"var(--ink-3)";
     h+='<div class="fac"><div class="fn">'+esc(f.name)+' <span class="lab">'+Math.round(f.w*100)+'%</span>'+
@@ -1370,16 +1399,25 @@ R.signal=function(b){
   h+='</div>';
 
   const mult=s.mult, risk=state.cfg.riskPerTrade;
-  h+='<hr class="sep"><div class="lab" style="margin-bottom:6px">If you take it</div><div class="panel">'+
-     '<div class="rowsplit"><span>Size</span><b class="mono">'+(s.size?s.size+" × "+state.cfg.instrument:"stand down")+'</b></div>'+
-     '<div class="rowsplit"><span>Stop</span><b class="mono">'+s.stop+' pts · $'+fmt(s.stop*mult,0)+'/contract</b></div>'+
-     '<div class="rowsplit"><span>Risk at size</span><b class="mono">$'+fmt(s.size*s.stop*mult,0)+' of $'+fmt(risk,0)+'</b></div>'+
-     '<div class="rowsplit"><span>First target (1.5R)</span><b class="mono">'+Math.round(s.stop*1.5)+' pts</b></div>'+
+  h+='<hr class="sep"><div class="lab" style="margin-bottom:6px">If you did decide to trade this</div><div class="panel">'+
+     '<div class="rowsplit"><span>The contract</span><b class="mono" title="The code for the Nasdaq-100 futures contract being traded at the moment. The letter and digit say which month it runs to, and it changes four times a year.">'+
+       esc(s.contract)+'</b></div>'+
+     '<div class="rowsplit"><span>How much to buy or sell</span><b class="mono">'+
+       (s.size ? s.size+" "+contractName(state.cfg.instrument,s.size)
+               : s.tier===0 ? "nothing — sit it out"
+               /* A real answer beats "sit it out" when the reading is fine and it is
+                  the risk limit that cannot stretch to a single contract. */
+               : "none — one would risk $"+fmt(s.stop*mult,0)+", over your limit")+'</b></div>'+
+     '<div class="rowsplit"><span>Give up and get out after</span><b class="mono">'+s.stop+' points · $'+fmt(s.stop*mult,0)+' each</b></div>'+
+     '<div class="rowsplit"><span>Money you would be risking</span><b class="mono">$'+fmt(s.size*s.stop*mult,0)+' of your $'+fmt(risk,0)+' limit</b></div>'+
+     '<div class="rowsplit"><span>First place to take a profit</span><b class="mono">'+Math.round(s.stop*1.5)+' points</b></div>'+
      '</div>'+
-     '<div class="note">Size scales with tier: stalk 1/3, engage 2/3, press full. Thresholds live in Settings.</div>';
+     '<div class="note">One point of movement is worth $'+fmt(mult,0)+' on each contract. The stronger the reading, the more '+
+     'this suggests: a third of your limit when it says watch, two thirds when it leans, all of it when it leans strongly. '+
+     'Your limits are in Settings.</div>';
 
-  h+='<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn pri" id="sig-log">Log this read</button>'+
-     '<button class="btn" id="sig-brief">Build a prompt</button></div>';
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn pri" id="sig-log">Save this to my journal</button>'+
+     '<button class="btn" id="sig-brief">Ask Claude about it</button></div>';
   h+='</div>';
   b.innerHTML=h;
   $("#sig-log",b).onclick=()=>{ openApp("jrnl"); prefillJournal(s); };
@@ -1394,47 +1432,58 @@ R.wire=function(b){
     (wireFilter==="mega"&&w.entity));
   let h='';
   if(state.wire.some(w=>w.demo))
-    h+='<div class="banner"><b>Demo&nbsp;feed</b><div>These headlines are archetypes that show how the scorer '+
-       'reads each kind of story. Run <span class="mono">npm run feed</span> and load the result in Settings, '+
-       'or deploy to AWS (<span class="mono">./aws/deploy.sh</span>) and the OS refreshes itself.</div></div>';
+    h+='<div class="banner"><b>Practice&nbsp;headlines</b><div>These are made-up examples, here to show you how the '+
+       'tool reads each kind of story. For real ones, run <span class="mono">npm run feed</span> in the project folder '+
+       'and paste the result into Settings — or put the page on AWS and it will fetch them by itself.</div></div>';
   h+='<div class="filters">'+
-     [["all","All"],["hi","Tier 1"],["bull","Bullish"],["bear","Bearish"],["mega","Top 7"]]
+     [["all","Everything"],["hi","Big stories"],["bull","Good for prices"],["bear","Bad for prices"],["mega","Giant companies"]]
       .map(x=>'<button class="btn'+(wireFilter===x[0]?" on":"")+'" data-f="'+x[0]+'">'+x[1]+'</button>').join("")+
-     '<button class="btn" id="wire-add">+ Paste headline</button></div>';
+     '<button class="btn" id="wire-add">+ Try your own</button></div>';
   h+='<div id="wirelist">';
   if(!f.length) h+='<div class="empty">Nothing matches this filter.</div>';
   for(const w of f){
     const mins=Math.round((Date.now()-w.ts)/60000);
     const age=mins<60?mins+"m":Math.floor(mins/60)+"h"+pad(mins%60);
-    h+='<div class="item" data-id="'+w.id+'"><div class="sc '+cls(w.score)+'">'+(w.score>0?"+":"")+w.score+
-       '<small>'+(w.channel==="macro"?"RATES":"RISK")+'</small></div><div>'+
+    h+='<div class="item" data-id="'+w.id+'" title="Tap to see why it scored this way">'+
+       '<div class="sc '+cls(w.score)+'">'+(w.score>0?"+":"")+w.score+
+       '<small>'+(w.channel==="macro"?"ECONOMY":"BUSINESS")+'</small></div><div>'+
        '<h4>'+esc(w.txt)+'</h4><div class="meta">'+
-       '<span class="chip '+(w.impact===3?"hi":w.impact===2?"md":"lo")+'">T'+(4-w.impact)+'</span>'+
+       '<span class="chip '+(w.impact===3?"hi":w.impact===2?"md":"lo")+'">'+
+         (w.impact===3?"big":w.impact===2?"medium":"small")+'</span>'+
        (w.entity?'<span class="chip a">'+w.entity+'</span>':'')+
-       (w.demo?'<span class="chip lo">demo</span>':'')+
+       (w.demo?'<span class="chip lo">example</span>':'')+
        '<span>'+esc(w.src)+'</span><span>&#183;</span><span>'+age+' ago</span></div>'+
        '<div class="why">'+wireWhy(w)+'</div></div></div>';
   }
   h+='</div>';
+  h+='<div class="note" style="margin-top:8px">Each story is scored from &#8722;100 to +100 for what it means for this '+
+     'index — not for whether it is good news in general. Tap any headline to see the reasoning.</div>';
   b.innerHTML=h;
   b.querySelectorAll("[data-f]").forEach(n=>n.onclick=()=>{wireFilter=n.dataset.f;renderApp("wire");});
   $("#wire-add",b).onclick=()=>pasteHeadline();
   b.querySelectorAll(".item").forEach(n=>n.onclick=()=>n.classList.toggle("open"));
 };
 function wireWhy(w){
-  const reg=state.cfg.regime==="inverse"?"good-news-is-bad-news":"growth";
-  let s="Read on the <b>"+(w.channel==="macro"?"rates":"risk")+"</b> channel in the <b>"+reg+"</b> regime. ";
-  if(w.entity) s+="Tagged <b>"+w.entity+"</b>, so its index weight amplifies the score. ";
-  s+="Source tier "+(SRC_TIER[w.src]||SRC_TIER.Other).toFixed(2)+", decaying at a 45-minute half-life.";
-  if(w.hits&&w.hits.length) s+='<br><span class="mono" style="font-size:10px;opacity:.75">'+
+  let s="This one reads as <b>"+(w.score>15?"good news for this index":w.score<-15?"bad news for this index":
+    "neither good nor bad")+"</b>";
+  s+=w.score>-16&&w.score<16?" — no phrase we recognise stood out, so judge it yourself. ":". ";
+  s+=w.channel==="macro"
+    ? "It is about the economy and interest rates. You have told the tool that strong economic news is currently <b>"+
+      (state.cfg.regime==="inverse"?"bad":"good")+"</b> news for share prices, which you can change in Settings. "
+    : "It is about how companies are doing, which feeds straight through to their share prices. ";
+  if(w.entity) s+="It names <b>"+w.entity+"</b>, one of the handful of giant companies that make up most of this index, "+
+    "so it counts for more than a story about a smaller firm. ";
+  s+="We weight "+esc(w.src)+" at "+Math.round((SRC_TIER[w.src]||SRC_TIER.Other)*100)+
+     "% of a top newswire, and every story counts for half as much again each 45 minutes it ages.";
+  if(w.hits&&w.hits.length) s+='<br><span class="mono" style="font-size:10px;opacity:.75">phrases spotted: '+
     w.hits.map(x=>esc(x[0])+" "+(x[1]>0?"+":"")+x[1]).join(" &#183; ")+'</span>';
   return s;
 }
 function pasteHeadline(){
   const b=wins.wire&&wins.wire.body; if(!b) return;
   const box=el("div","panel");
-  box.innerHTML='<div class="lab" style="margin-bottom:5px">Score a headline</div>'+
-    '<input type="text" id="hl-in" placeholder="Paste a headline or a wire line" autocomplete="off">'+
+  box.innerHTML='<div class="lab" style="margin-bottom:5px">Try a headline of your own</div>'+
+    '<input type="text" id="hl-in" placeholder="Paste any news headline and see how it scores" autocomplete="off">'+
     '<div style="display:flex;gap:6px;margin-top:7px"><button class="btn pri" id="hl-go">Score it</button>'+
     '<button class="btn" id="hl-x">Cancel</button></div>';
   b.insertBefore(box,b.firstChild.nextSibling);
@@ -1452,7 +1501,7 @@ R.cat=function(b){
   let h='';
   if(s&&s.next){
     const m=s.next.mins;
-    h+='<div class="panel" style="margin-bottom:10px"><div class="lab">Next tier-1 catalyst</div>'+
+    h+='<div class="panel" style="margin-bottom:10px"><div class="lab">Next big announcement</div>'+
        '<div class="rowsplit" style="margin-top:3px"><b style="font-size:14px">'+esc(s.next.ev.name)+'</b>'+
        '<b class="mono" style="font-size:15px;color:var(--accent)">'+(m<0?"live":m<60?Math.round(m)+" min":
          m<1440?Math.floor(m/60)+"h "+Math.round(m%60)+"m":Math.round(m/1440)+"d")+'</b></div>'+
@@ -1466,18 +1515,19 @@ R.cat=function(b){
       const m=minsUntil(day.offset,e.min), past=m<-2;
       const isNext=s&&s.next&&s.next.ev===e;
       h+='<div class="ev'+(past?" past":"")+(isNext?" next":"")+'">'+
-         '<div class="t">'+hm(e.min)+'<small>ET</small></div>'+
+         '<div class="t">'+h12(e.min)+'<small>'+mer(e.min)+' NY</small></div>'+
          '<div class="n">'+esc(e.name)+
          ' <span class="chip '+(e.impact===3?"hi":e.impact===2?"md":"lo")+'">'+
-           (e.impact===3?"tier 1":e.impact===2?"tier 2":"tier 3")+'</span>'+
+           (e.impact===3?"market-moving":e.impact===2?"worth watching":"routine")+'</span>'+
          '<small>'+esc(e.det)+'</small></div>'+
          '<div class="cd">'+(past?"done":m<60?Math.round(m)+"m":Math.floor(m/60)+"h "+pad(Math.round(m%60))+"m")+'</div></div>';
     }
     h+='</div>';
   }
-  h+='<div class="note" style="margin-top:12px">Times are ET and generated from each release’s publication rule '+
-     '(NFP first Friday, CPI the 10th–13th, PCE month-end, FOMC on its meeting cadence). '+
-     'Confirm the FOMC dates against the Fed calendar — the cadence shifts by a week some years.</div>';
+  h+='<div class="note" style="margin-top:12px">These are the reports and events that can move prices on their own, '+
+     'so the tool steps aside just before and just after the big ones. All times are New York time. The dates are worked '+
+     'out from the usual publishing pattern — the jobs report on the first Friday, inflation around the 10th to 13th, '+
+     'and so on — so check the central bank dates against the Fed\'s own calendar, because those shift by a week some years.</div>';
   b.innerHTML=h;
 };
 
@@ -1487,26 +1537,37 @@ R.tape=function(b){
   let h='<div class="qgrid">';
   for(const s of SYMS){
     const x=q[s.k], good=s.inv?-x.pct:x.pct;
-    h+='<div class="q"><div class="s"><span>'+s.n+'</span>'+(s.inv?'<span title="trades inverse to NQ">inv</span>':'')+'</div>'+
+    h+='<div class="q" title="'+esc(s.lab+" ("+s.n+"). "+s.tip+(s.inv?" It usually moves in the opposite direction to the Nasdaq 100.":""))+'">'+
+       '<div class="s"><span>'+esc(s.lab)+'</span>'+(s.inv?'<span>opposite</span>':'')+'</div>'+
        '<div class="p">'+fmt(x.last,s.d)+'</div>'+
        '<div class="c '+cls(good)+'">'+sgn(x.chg)+' &#183; '+sgn(x.pct)+'%</div></div>';
   }
   const spread=market.q.nq.pct-market.q.es.pct;
-  h+='<div class="q" title="NQ minus ES on the day"><div class="s"><span>NQ\u2013ES</span><span>rel</span></div>'+
+  h+='<div class="q" title="How the Nasdaq 100 is doing today compared with the wider US market">'+
+     '<div class="s"><span>Tech vs market</span></div>'+
      '<div class="p '+cls(spread)+'">'+sgn(spread)+'%</div>'+
-     '<div class="c" style="color:var(--ink-3)">'+(spread>=0?'NQ leading':'NQ lagging')+'</div></div>';
+     '<div class="c" style="color:var(--ink-3)">'+(spread>=0?'tech ahead':'tech behind')+'</div></div>';
   h+='</div>';
+  h+='<div class="note" style="margin-top:6px">Green is good for the Nasdaq 100, red is bad. The three marked '+
+     '<b>opposite</b> work the other way round: when they go up, this index usually goes down. Hover or tap any '+
+     'tile to see what it is.</div>';
 
-  const named=[["PDH",L.pdh],["ONH",L.onh],["IBH",L.ibh],["VWAP",L.vwap],["PDC",L.pdc],
-               ["IBL",L.ibl],["ONL",L.onl],["PDL",L.pdl]].filter(x=>x[1]!=null);
-  const missing=["PDH","ONH","IBH","VWAP","PDC","IBL","ONL","PDL"]
-    .filter(n=>!named.some(x=>x[0]===n));
+  /* The prices traders watch, named the way you would say them rather than by
+     their usual three-letter shorthand. */
+  const LEVELS=[["pdh","Yesterday's high"],["onh","Overnight high"],["ibh","First-hour high"],
+                ["vwap","Today's average price"],["pdc","Yesterday's close"],["ibl","First-hour low"],
+                ["onl","Overnight low"],["pdl","Yesterday's low"]];
+  const named=LEVELS.filter(x=>L[x[0]]!=null).map(x=>[x[1],L[x[0]]]);
+  const missing=LEVELS.filter(x=>L[x[0]]==null).map(x=>x[1]);
   const vals=named.map(x=>x[1]).concat([nq]);
   /* pad the domain so a tight cluster of levels still reads */
   const raw=[Math.min(...vals),Math.max(...vals)], padv=Math.max((raw[1]-raw[0])*0.12,raw[1]*0.0006);
   const hi=raw[1]+padv, lo=raw[0]-padv, rng=hi-lo||1;
   const pos=v=>((hi-v)/rng*100);
-  h+='<hr class="sep"><div class="lab">Levels that matter today</div><div class="ladder">';
+  h+='<hr class="sep"><div class="lab">Prices worth watching today</div>'+
+     '<div class="note" style="margin-top:3px;margin-bottom:2px">Prices often stall or turn around at yesterday\'s '+
+     'high and low, at the overnight range, and at the day\'s average price. The orange line is where it is trading now.</div>'+
+     '<div class="ladder">';
   for(const [n,v] of named)
     h+='<div class="lv" style="top:'+pos(v).toFixed(2)+'%"><b>'+fmt(v,2)+'</b><span>'+n+'</span></div>';
   h+='<div class="px" style="top:'+pos(nq).toFixed(2)+'%"><b>'+fmt(nq,2)+'</b></div></div>';
@@ -1515,18 +1576,20 @@ R.tape=function(b){
   for(const [n,v] of named){
     const d=nq-v;
     h+='<div class="lvl"><span class="nm">'+n+'</span><span>'+fmt(v,2)+'</span>'+
-       '<span class="d '+cls(d)+'">'+sgn(d)+'</span></div>';
+       '<span class="d '+cls(d)+'">'+fmt(Math.abs(d),0)+(d<0?" above":" below")+'</span></div>';
   }
   h+='</div>';
   if(missing.length)
-    h+='<div class="note" style="margin-top:6px"><b>Not in this feed yet:</b> '+missing.join(", ")+
-       '. VWAP and the initial balance only exist once the cash session has traded, so they stay '+
-       'empty overnight instead of showing a number nobody measured.</div>';
+    h+='<div class="note" style="margin-top:6px"><b>Not worked out yet today:</b> '+missing.join(", ")+
+       '. The average price and the first-hour range only exist once US shares have actually been trading, so '+
+       'overnight they are left blank rather than filled with a number nobody measured.</div>';
   h+='<div class="note" style="margin-top:10px">'+(market.live
-      ? "Live snapshot written "+esc(market.stamp||"")+"."
-      : "Simulated tape — a random walk anchored to the reference price in Settings, so the structure logic "+
-        "has something to chew on. It is not a quote feed and no sandboxed page can be one.")+
-     '<br>1 NQ point = $20.00 · 1 tick (0.25) = $5.00 · MNQ is 1/10th.</div>';
+      ? "These are real prices, pulled "+esc(market.stamp||"")+"."
+      : "These prices are made up — they wander at random from the starting price you set in Settings, so the rest of "+
+        "the tool has something to work with. They are not real quotes, and a page in a sandbox like this one cannot "+
+        "go and fetch real ones by itself.")+
+     '<br>One point up or down is worth $20 on a standard contract, or $2 on the smaller one. The smallest step a '+
+     'price can take is a quarter of a point, which is $5.</div>';
   b.innerHTML=h;
 };
 
@@ -1536,53 +1599,53 @@ function setups(){
   const nx=s.next, minsTo=nx?nx.mins:9999;
   const C=(ok,txt)=>({ok:!!ok,txt});
   return [
-  {n:"Opening drive",
-   d:"The first 15 minutes set the day's direction more often than any other window. Trade with it, not against it.",
-   c:[C(m>=570&&m<585,"09:30–09:45 ET"),
-      C(Math.abs(q.nq.pct)>.35,"Gap or open beyond ±0.35%"),
-      C((nq>L.vwap&&s.composite>0)||(nq<L.vwap&&s.composite<0),"Price and bias on the same side of VWAP"),
-      C(Math.abs(s.composite)>30,"Bias score beyond ±30")],
-   x:"Invalidated on a 5-minute close back through VWAP."},
-  {n:"Catalyst reaction fade",
-   d:"The first move after a tier-1 print is dealers hedging, not positioning. When the tape disagrees with the spike, fade it.",
-   c:[C(minsTo<=0&&minsTo>-45,"Tier-1 event printed inside 45 minutes"),
-      C(Math.abs(q.nq.pct)>.5,"Index has travelled more than 0.5%"),
+  {n:"The opening push",
+   d:"Whichever way the market goes in the first fifteen minutes tends to set the tone for the day. The idea is to go with it rather than argue with it.",
+   c:[C(m>=570&&m<585,"It is between 9:30 and 9:45 in the morning, New York time"),
+      C(Math.abs(q.nq.pct)>.35,"The index has already moved more than a third of a per cent today"),
+      C((nq>L.vwap&&s.composite>0)||(nq<L.vwap&&s.composite<0),"The price and our score point the same way"),
+      C(Math.abs(s.composite)>30,"Our score is stronger than 30, up or down")],
+   x:"Drop it if the price slips back past today's average price and stays there for five minutes."},
+  {n:"Betting against the first spike",
+   d:"The jump straight after a big announcement is mostly automatic order-filling, not people making up their minds. When the news itself points the other way, that first jump is often given back.",
+   c:[C(minsTo<=0&&minsTo>-45,"A market-moving announcement landed less than 45 minutes ago"),
+      C(Math.abs(q.nq.pct)>.5,"The index has already travelled more than half a per cent"),
       C(Math.sign(s.factors[0].score)!==Math.sign(q.nq.pct)&&Math.abs(s.factors[0].score)>20,
-        "News tape disagrees with the direction of the move"),
-      C(s.conf>40,"Confidence above 40%")],
-   x:"Invalidated if the post-print extreme trades through again."},
-  {n:"Mega-cap torque",
-   d:"The top seven names are roughly 45% of the index. A single name story moves NQ far more than it moves ES — trade the spread, not the tape.",
-   c:[C(Math.abs(s.factors[5].score)>35,"Top-weight story scoring beyond ±35"),
-      C(Math.abs(q.nq.pct-q.es.pct)>.15,"NQ diverging from ES by more than 0.15%"),
-      C(m>=570&&m<960,"Cash session open")],
-   x:"Invalidated when the NQ–ES spread closes back to flat."},
-  {n:"Dovish drift",
-   d:"After a dovish Fed surprise the index grinds rather than spikes. Buy pullbacks to VWAP into the close.",
-   c:[C(nx&&/FOMC|Chair/.test(nx.ev.name)&&minsTo<0&&minsTo>-180,"Inside three hours of an FOMC event"),
-      C(s.factors[1].score>25,"Reaction reading dovish"),
-      C(q.tnx.pct<0,"10-year yield lower on the day"),
-      C(nq>L.vwap,"Holding above VWAP")],
-   x:"Invalidated below the pre-announcement low."},
-  {n:"Risk-off cascade",
-   d:"Correlated de-risking: volatility bid, yields and the dollar bid, breadth gone. Sell rallies, do not hunt the bottom.",
-   c:[C(q.vx.pct>5,"VIX up more than 5%"),
-      C(q.dxy.pct>.2,"Dollar bid"),
-      C(nq<L.onl,"Trading below the overnight low"),
-      C(s.composite<-30,"Bias score below −30")],
-   x:"Invalidated on a reclaim of the overnight low."},
-  {n:"Lunch reversion",
-   d:"12:00–13:30 ET, thin book. Extremes get faded back toward VWAP. Small size, quick targets.",
-   c:[C(m>=720&&m<810,"12:00–13:30 ET"),
-      C(Math.abs(s.composite)<30,"No directional edge in the tape"),
-      C(Math.abs(nq-L.vwap)>25,"More than 25 points from VWAP"),
-      C(minsTo>120||minsTo<-120,"No tier-1 event nearby")],
-   x:"Invalidated if the move extends another 20 points against you."},
-  {n:"Pre-release compression",
-   d:"This is a setup that tells you not to trade. Volatility is sold into a print; breakouts inside the window fail.",
-   c:[C(minsTo>0&&minsTo<=25,"Tier-1 event inside 25 minutes"),
-      C(true,"Flatten or stand aside until the 5-minute close after the number")],
-   x:"Resumes once the post-print range is defined."}
+        "The news itself points the opposite way to the price move"),
+      C(s.conf>40,"The tool is more than 40% sure of its reading")],
+   x:"Drop it if the price pushes back through the extreme it hit just after the announcement."},
+  {n:"One giant company dragging the index",
+   d:"The seven largest companies are roughly 45% of this index, so news about one of them moves the Nasdaq far more than it moves the wider US market. The gap between the two is the cleaner thing to bet on.",
+   c:[C(Math.abs(s.factors[5].score)>35,"A story about one of the giants is scoring beyond 35, up or down"),
+      C(Math.abs(q.nq.pct-q.es.pct)>.15,"The Nasdaq is out of step with the wider market by more than 0.15%"),
+      C(m>=570&&m<960,"US shares are open for trading")],
+   x:"Drop it once the Nasdaq and the wider market are back in line with each other."},
+  {n:"The slow climb after a friendly central bank",
+   d:"When the Fed turns out gentler than people feared, this index tends to grind upwards for hours rather than jump. The idea is to buy the small dips back towards the day's average price.",
+   c:[C(nx&&/Interest rate|press conference/i.test(nx.ev.name)&&minsTo<0&&minsTo>-180,"We are within three hours of a central bank announcement"),
+      C(s.factors[1].score>25,"The reaction reads as friendly to share prices"),
+      C(q.tnx.pct<0,"Government borrowing costs are lower today"),
+      C(nq>L.vwap,"The price is holding above today's average price")],
+   x:"Drop it if the price falls below where it was just before the announcement."},
+  {n:"Everyone heading for the exit at once",
+   d:"A day when nervousness, the dollar and borrowing costs all rise together and nothing goes up. On days like that, every bounce tends to get sold. Trying to guess the bottom is how people get hurt.",
+   c:[C(q.vx.pct>5,"The fear gauge is up more than 5%"),
+      C(q.dxy.pct>.2,"Money is moving into the dollar"),
+      C(nq<L.onl,"The price is below its overnight low"),
+      C(s.composite<-30,"Our score is below −30")],
+   x:"Drop it if the price climbs back above the overnight low."},
+  {n:"The lunchtime snap-back",
+   d:"Between midday and half past one in New York, a lot of traders are away. Prices that wander a long way from the day's average tend to drift back to it. Small amounts, quick exits.",
+   c:[C(m>=720&&m<810,"It is between midday and 1:30 pm, New York time"),
+      C(Math.abs(s.composite)<30,"Nothing in the news points either way"),
+      C(Math.abs(nq-L.vwap)>25,"The price is more than 25 points from today's average"),
+      C(minsTo>120||minsTo<-120,"No big announcement within a couple of hours")],
+   x:"Drop it if the move carries on another 20 points against you."},
+  {n:"The quiet before a big number",
+   d:"This is the one pattern that tells you not to trade. Prices go still ahead of a big announcement, and moves that start in that gap almost always fizzle out.",
+   c:[C(minsTo>0&&minsTo<=25,"A market-moving announcement is due within 25 minutes"),
+      C(true,"Close anything you are holding, or simply wait until five minutes after the number lands")],
+   x:"Normal service resumes once the price has settled into a range after the announcement."}
   ];
 }
 R.play=function(b){
@@ -1592,10 +1655,13 @@ R.play=function(b){
     return {...s,met,armed:met===s.c.length};
   }).sort((a,b2)=>(b2.met/b2.c.length)-(a.met/a.c.length));
   let h='<div class="stack">';
+  h+='<div class="note">Seven situations that come up again and again. Each one lists what has to be true before it '+
+     'counts, and the tool ticks them off for you as the day goes on. A pattern is only <b>all set</b> when every line '+
+     'is ticked — and even then it is a prompt to look, not an instruction to trade.</div>';
   for(const s of list){
     h+='<div class="setup'+(s.armed?" armed":"")+'"><div class="rowsplit">'+
        '<h4>'+esc(s.n)+'</h4><span class="chip '+(s.armed?"a":"lo")+'">'+
-       (s.armed?"armed":s.met+"/"+s.c.length)+'</span></div>'+
+       (s.armed?"all set":s.met+" of "+s.c.length)+'</span></div>'+
        '<div class="note" style="margin-bottom:5px">'+esc(s.d)+'</div>';
     for(const c of s.c)
       h+='<div class="cond '+(c.ok?"met":"no")+'"><span class="mk">'+(c.ok?"■":"□")+'</span><span>'+esc(c.txt)+'</span></div>';
@@ -1617,45 +1683,46 @@ R.jrnl=function(b){
   const avgL=losses.length?losses.reduce((a,r)=>a+Math.abs(r.score),0)/losses.length:0;
   const p=jPrefill||{};
   let h='<div class="statgrid" style="margin-bottom:12px">'+
-    '<div class="stat"><b>'+rows.length+'</b><span class="lab">logged</span></div>'+
-    '<div class="stat"><b class="'+cls(net)+'">'+(closed.length?sgn(net,0):"—")+'</b><span class="lab">net pts</span></div>'+
-    '<div class="stat"><b>'+(closed.length?Math.round(wins_.length/closed.length*100)+"%":"—")+'</b><span class="lab">win rate</span></div>'+
-    '<div class="stat"><b>'+(avgW?Math.round(avgW):"—")+'</b><span class="lab">|score| on winners</span></div>'+
-    '<div class="stat"><b>'+(avgL?Math.round(avgL):"—")+'</b><span class="lab">|score| on losers</span></div>'+
+    '<div class="stat"><b>'+rows.length+'</b><span class="lab">trades noted</span></div>'+
+    '<div class="stat"><b class="'+cls(net)+'">'+(closed.length?sgn(net,0):"—")+'</b><span class="lab">points up or down</span></div>'+
+    '<div class="stat"><b>'+(closed.length?Math.round(wins_.length/closed.length*100)+"%":"—")+'</b><span class="lab">went your way</span></div>'+
+    '<div class="stat"><b>'+(avgW?Math.round(avgW):"—")+'</b><span class="lab">score when right</span></div>'+
+    '<div class="stat"><b>'+(avgL?Math.round(avgL):"—")+'</b><span class="lab">score when wrong</span></div>'+
     '</div>';
   if(avgW&&avgL) h+='<div class="note" style="margin-bottom:10px">'+(avgW>avgL+6
-    ? "Your winners came at a stronger signal than your losers — raising the minimum score in Settings would have cut losses more than wins."
-    : avgL>avgW+6 ? "Your losers came at the stronger signal. The score is not the edge here; look at which setup and which session."
-    : "No separation yet between the signal on winners and losers. Keep logging.")+'</div>';
+    ? "The trades that worked came on a stronger reading than the ones that did not. Being fussier — raising the score you require in Settings — would have cut more losses than wins."
+    : avgL>avgW+6 ? "Odd one: your losing trades came on the stronger readings. The score is not what is helping you here, so look instead at which pattern you were playing and what time of day it was."
+    : "So far the readings on your good and bad trades look much the same. Keep noting them down; a few more and the pattern will show.")+'</div>';
 
-  h+='<div class="panel" style="margin-bottom:12px"><div class="lab" style="margin-bottom:6px">New entry</div>'+
+  h+='<div class="panel" style="margin-bottom:12px"><div class="lab" style="margin-bottom:6px">Note down a trade</div>'+
     '<div class="g2">'+
-    '<select id="j-dir"><option value="L"'+(p.dir==="L"?" selected":"")+'>Long</option>'+
-    '<option value="S"'+(p.dir==="S"?" selected":"")+'>Short</option></select>'+
+    '<select id="j-dir"><option value="L"'+(p.dir==="L"?" selected":"")+'>I bet it would rise</option>'+
+    '<option value="S"'+(p.dir==="S"?" selected":"")+'>I bet it would fall</option></select>'+
     '<select id="j-setup">'+setups().map(s=>'<option>'+esc(s.n)+'</option>').join("")+'</select>'+
     '</div>'+
-    '<input type="text" id="j-cat" placeholder="Catalyst — the headline or event you traded" value="'+esc(p.catalyst||"")+'" style="margin-top:7px">'+
+    '<input type="text" id="j-cat" placeholder="What made you do it — the headline or the event" value="'+esc(p.catalyst||"")+'" style="margin-top:7px">'+
     '<div class="g3" style="margin-top:7px">'+
     '<input type="number" id="j-score" placeholder="score" value="'+(p.score!=null?p.score:"")+'">'+
-    '<input type="number" id="j-conf" placeholder="conf %" value="'+(p.conf!=null?p.conf:"")+'">'+
-    '<input type="number" id="j-pts" placeholder="result pts">'+
+    '<input type="number" id="j-conf" placeholder="% sure" value="'+(p.conf!=null?p.conf:"")+'">'+
+    '<input type="number" id="j-pts" placeholder="points won or lost">'+
     '</div>'+
-    '<textarea id="j-note" placeholder="What did you see, and what would make you skip it next time?" style="margin-top:7px"></textarea>'+
-    '<div style="display:flex;gap:6px;margin-top:7px"><button class="btn pri" id="j-save">Save entry</button>'+
-    '<span class="note" style="align-self:center">'+(state.storeMode==="shared"?"Saved to the shared store"
-      :state.storeMode==="local"?"Saved in this browser only":"Not persisted in this view")+'</span></div></div>';
+    '<textarea id="j-note" placeholder="What did you notice, and what would make you leave it alone next time?" style="margin-top:7px"></textarea>'+
+    '<div style="display:flex;gap:6px;margin-top:7px"><button class="btn pri" id="j-save">Save it</button>'+
+    '<span class="note" style="align-self:center">'+(state.storeMode==="shared"?"Kept where everyone with this page can see it"
+      :state.storeMode==="local"?"Kept in this browser only":"Not being kept anywhere in this view")+'</span></div></div>';
 
-  h+='<div class="lab" style="margin-bottom:4px">Log</div>';
-  if(!rows.length) h+='<div class="empty">Nothing logged yet. Every entry makes the next signal easier to trust or discard.</div>';
+  h+='<div class="lab" style="margin-bottom:4px">Your trades</div>';
+  if(!rows.length) h+='<div class="empty">Nothing noted down yet. Every trade you record makes it easier to tell whether this tool is actually helping you.</div>';
   for(const r of rows){
     const d=new Date(r.ts), pt=r.pts===""||r.pts==null?null:+r.pts;
-    h+='<div class="jrow"><span class="dir '+r.dir+'">'+r.dir+'</span><div>'+
+    h+='<div class="jrow"><span class="dir '+r.dir+'" title="'+(r.dir==="L"?"You bet the price would rise":"You bet the price would fall")+'">'+
+      (r.dir==="L"?"UP":"DOWN")+'</span><div>'+
       '<div style="font-size:12px;font-weight:600">'+esc(r.setup||"—")+'</div>'+
       '<div class="note">'+esc(r.catalyst||"")+'</div>'+
       (r.notes?'<div class="note" style="color:var(--ink-2);margin-top:3px">'+esc(r.notes)+'</div>':'')+
       '<div class="meta note mono" style="margin-top:3px">'+d.toLocaleString()+
-      ' · score '+(r.score!=null?r.score:"—")+' · conf '+(r.conf!=null?r.conf+"%":"—")+'</div></div>'+
-      '<div><div class="pl '+(pt==null?"flat":cls(pt))+'">'+(pt==null?"open":sgn(pt,0))+'</div>'+
+      ' · score '+(r.score!=null?r.score:"—")+' · '+(r.conf!=null?r.conf+"% sure":"—")+'</div></div>'+
+      '<div><div class="pl '+(pt==null?"flat":cls(pt))+'">'+(pt==null?"still on":sgn(pt,0))+'</div>'+
       '<button class="btn" data-del="'+r.id+'" style="padding:1px 6px;font-size:10px;margin-top:4px">delete</button></div></div>';
   }
   b.innerHTML=h;
@@ -1671,22 +1738,24 @@ R.jrnl=function(b){
     state.journal=state.journal.filter(r=>r.id!==n.dataset.del); await saveJournal(); renderApp("jrnl");});
 };
 
-/* -------------------------------------------------------------- BRIEF
-   No model runs in this OS. This app assembles everything the console knows
-   into one prompt you paste into Claude yourself — your model, your thinking
-   budget, your account, no key and no per-question cost.
+/* ------------------------------------------------------- ASK CLAUDE
+   There is no AI inside this page. This app gathers up everything the
+   dashboard knows and writes it out as one message you paste into Claude
+   yourself — your account, your choice of model, no key and no cost per
+   question.
    -------------------------------------------------------------------- */
 const ASKS={
-  read:"Give me your read. Is this a stand-aside or a trade? Make the strongest case on each side, "+
-       "commit to one, and name the single thing that would flip you. Be specific about levels.",
-  next:"Brief me on the next scheduled catalyst: what the market is positioned for, how NQ typically "+
-       "behaves in the thirty minutes either side of it, and how I should be positioned going in.",
-  levels:"Map the rest of this session: the level that confirms upside continuation, the level that "+
-         "confirms downside, and the zone where there is simply no trade.",
-  against:"Argue against the console's bias as hard as you can. Which factor is most likely wrong right "+
-          "now, and what would the tape look like if it were?",
-  risk:"Critique my risk plan — the stop distance, the size, and where the first target sits relative to "+
-       "the structure. What am I not accounting for?",
+  read:"Tell me what you make of all this. Is this a moment to stay out, or is there a trade here? Make the best "+
+       "case for buying and the best case for selling, then pick one and tell me the single thing that would change "+
+       "your mind. Be specific about which prices matter.",
+  next:"Explain the next big scheduled event to me: what it is, what people are expecting, what usually happens to "+
+       "this index in the half hour either side of it, and what a sensible person does going into it.",
+  levels:"Walk me through the rest of the day: the price that would tell me it is genuinely heading up, the price "+
+         "that would tell me it is heading down, and the range in between where there is simply nothing to do.",
+  against:"Argue against my dashboard as hard as you can. Which of its six inputs is most likely to be wrong right "+
+          "now, and what would I be seeing if it were?",
+  risk:"Look at my plan for losing money: where I get out if I am wrong, how much I would be putting on, and where "+
+       "the first profit target sits. What am I not thinking about?",
   none:""
 };
 const briefCfg={ask:"read",custom:"",wire:12,cal:true,play:true,jrnl:true,method:false};
@@ -1694,78 +1763,88 @@ const briefCfg={ask:"read",custom:"",wire:12,cal:true,play:true,jrnl:true,method
 function buildPrompt(){
   const s=state.signal, q=market.q, L=market.levels, c=state.cfg, P=[], nq=q.nq.last;
   const push=(...x)=>P.push(...x);
-  const dist=v=>sgn(nq-v,0);
+  /* "211 points above the price" beats "-211" for anyone reading this cold. */
+  const dist=v=>fmt(Math.abs(nq-v),0)+" points "+(nq<v?"above":"below")+" the current price";
 
-  push("# NQ futures \u2014 desk brief",
-       "_"+s.t.key+" "+pad(s.t.h)+":"+pad(s.t.mi)+" ET \u00b7 generated by NQ Trading OS_","");
+  push("# Nasdaq-100 futures \u2014 where things stand",
+       "_"+s.t.key+" "+hm(s.t.min)+" New York time \u00b7 put together by NQ Trading OS_","");
 
-  push("You are a futures desk analyst talking to one trader about Nasdaq-100 futures ("+s.contract+").",
-       "Everything below is the complete state of my console. Do not invent headlines, prices or levels "+
-       "beyond what is given here \u2014 if something you need is missing, say that instead of filling it in.",
-       "Plain sentences, trader vocabulary, no preamble and no disclaimers. Take a position.","");
+  push("You are an experienced futures trader explaining Nasdaq-100 futures ("+s.contract+") to someone who is new "+
+       "to markets and does not know the jargon.",
+       "Everything below is everything my dashboard knows. Do not invent headlines, prices or price levels beyond "+
+       "what is given here \u2014 if something you need is missing, say so instead of filling in the gap.",
+       "Answer in plain English and short sentences. Where you have to use a trading term, say what it means in "+
+       "brackets the first time you use it. No preamble and no disclaimers: tell me what you actually think.","");
 
-  push("**Data provenance.** "+(market.live
-    ? "Quotes and session levels are a real snapshot pulled "+(market.stamp||"recently")+
-      ", and the headlines are a real RSS pull."
-    : "The tape and levels are SIMULATED \u2014 a random walk anchored to a reference price \u2014 and the "+
-      "headlines are sample archetypes, not live news. Treat the numbers as a worked example rather than a "+
-      "real market, and say so if I ask you to act on them."),"");
+  push("**Where these numbers come from.** "+(market.live
+    ? "The prices were pulled "+(market.stamp||"recently")+" and are real, and so are the headlines."
+    : "The prices here are MADE UP \u2014 they wander at random from a starting price I chose \u2014 and the "+
+      "headlines are examples rather than real news. Treat all of it as a worked example rather than a real "+
+      "market, and say so if I ask you to act on it."),"");
 
-  push("## Clock",
-       "- Time: "+pad(s.t.h)+":"+pad(s.t.mi)+" ET",
-       "- Session: "+s.sess.name+" \u2014 "+s.sess.note,
-       "- Front month: "+s.contract+" ($20 per point, 0.25 tick = $5)","");
+  push("## The clock",
+       "- Time: "+hm(s.t.min)+" in New York",
+       "- Where we are in the day: "+s.sess.name+" \u2014 "+s.sess.note,
+       "- The contract in question: "+s.contract+" (one point of movement is worth $20; the smallest step a price "+
+         "can take is a quarter point, which is $5)","");
 
-  push("## What the console reads",
-       "- Composite bias: **"+(s.composite>0?"+":"")+s.composite+"** on a \u2212100..+100 scale",
-       "- Confidence: **"+s.conf+"%**",
-       "- Verdict: **"+s.label+"**",
-       "- Blocking gates: "+(s.gates.length?s.gates.map(g=>g.t+" ("+g.d+")").join("; "):"none"),"");
+  push("## What my dashboard makes of it",
+       "- Overall score: **"+(s.composite>0?"+":"")+s.composite+"**, on a scale from \u2212100 (everything points "+
+         "down) to +100 (everything points up)",
+       "- How sure it is: **"+s.conf+"%**",
+       "- Its verdict: **"+s.label+"** \u2014 "+s.blurb,
+       "- Reasons to stay out of the market right now: "+(s.gates.length?s.gates.map(g=>g.t+" ("+g.d+")").join("; "):"none"),"");
 
-  push("## Factors","| factor | weight | score | what it is reading |","|---|---|---|---|");
+  push("## The six things it looks at","| what it looks at | how much it counts | score | what it is seeing |","|---|---|---|---|");
   for(const f of s.factors)
     push("| "+f.name+" | "+Math.round(f.w*100)+"% | "+(f.score>0?"+":"")+f.score+" | "+f.note+" |");
   push("");
 
-  push("## Tape");
+  push("## Prices right now");
   for(const k of ["nq","es","rty","vx","tnx","dxy","gc","cl","btc"]){
     const x=q[k]; if(!x) continue;
-    push("- "+x.n+" "+fmt(x.last,x.d)+"  ("+sgn(x.chg)+", "+sgn(x.pct)+"%)"+(x.inv?"  [inverse to NQ]":""));
+    push("- "+x.lab+" ("+x.n+") "+fmt(x.last,x.d)+"  ("+sgn(x.chg)+", "+sgn(x.pct)+"%)"+
+         (x.inv?"  [this one usually moves opposite to the Nasdaq]":""));
   }
-  push("- NQ\u2013ES spread: "+sgn(q.nq.pct-q.es.pct)+"% ("+(q.nq.pct>=q.es.pct?"NQ leading":"NQ lagging")+")","");
+  push("- Nasdaq against the wider US market: "+sgn(q.nq.pct-q.es.pct)+"% ("+
+       (q.nq.pct>=q.es.pct?"tech ahead":"tech behind")+")","");
 
-  push("## Levels (distance from spot "+fmt(nq,2)+")");
-  for(const [n,v] of [["Prior day high",L.pdh],["Overnight high",L.onh],["Initial balance high",L.ibh],
-                      ["Session VWAP",L.vwap],["Prior day close",L.pdc],["Initial balance low",L.ibl],
-                      ["Overnight low",L.onl],["Prior day low",L.pdl]])
-    push("- "+n+": "+fmt(v,2)+"  ("+dist(v)+" pts)");
+  push("## Prices worth watching, and how far today's "+fmt(nq,2)+" is from each");
+  for(const [n,v] of [["Yesterday's high",L.pdh],["Overnight high",L.onh],["First-hour high",L.ibh],
+                      ["Today's average price",L.vwap],["Yesterday's close",L.pdc],["First-hour low",L.ibl],
+                      ["Overnight low",L.onl],["Yesterday's low",L.pdl]])
+    push("- "+n+": "+fmt(v,2)+"  ("+dist(v)+")");
   push("");
 
   if(briefCfg.wire>0){
     const rows=state.wire.slice(0,briefCfg.wire);
-    push("## Wire \u2014 newest first, scored \u2212100..+100 by the console's own keyword lexicon.",
-         "A score of **0 means no pattern matched**, not that the story is neutral \u2014 judge those "+
-         "headlines yourself, and tell me if the lexicon is missing something it should be catching.");
-    if(!rows.length) push("_nothing on the wire_");
+    push("## The news, newest first",
+         "Each headline is scored from \u2212100 to +100 by a simple list of words and phrases, for what it means "+
+         "for this index rather than for whether it is good news in general.",
+         "A score of **0 means no phrase in that list matched**, not that the story is unimportant \u2014 judge those "+
+         "ones yourself, and tell me if the word list is missing something it ought to be catching.");
+    if(!rows.length) push("_no headlines_");
     for(const w of rows){
       const mins=Math.round((Date.now()-w.ts)/60000);
       push("- **["+(w.score>0?"+":"")+w.score+"]** "+w.txt+
-           "  \u2014 "+w.src+", "+(mins<60?mins+"m":Math.floor(mins/60)+"h")+" ago, tier "+(4-w.impact)+
-           ", "+(w.channel==="macro"?"rates":"risk")+" channel"+(w.entity?", "+w.entity:"")+(w.demo?" _(sample)_":""));
+           "  \u2014 "+w.src+", "+(mins<60?mins+"m":Math.floor(mins/60)+"h")+" ago, "+
+           (w.impact===3?"big story":w.impact===2?"medium story":"small story")+
+           ", about "+(w.channel==="macro"?"the economy and interest rates":"how companies are doing")+
+           (w.entity?", names "+w.entity:"")+(w.demo?" _(made-up example)_":""));
     }
     push("");
   }
 
   if(briefCfg.cal){
-    push("## Scheduled catalysts");
+    push("## What is scheduled");
     let any=false;
     for(const day of calendar(2)) for(const e of day.events){
       if(e.impact<2) continue;
       const m=minsUntil(day.offset,e.min); any=true;
-      push("- "+(day.offset?"tomorrow":"today")+" "+hm(e.min)+" ET \u2014 **"+e.name+"** (tier "+(4-e.impact)+
-           ", "+(m<0?dur(-m)+" ago":"in "+dur(m))+"): "+e.det);
+      push("- "+(day.offset?"tomorrow":"today")+" "+hm(e.min)+" New York \u2014 **"+e.name+"** ("+
+           (e.impact===3?"market-moving":"worth watching")+", "+(m<0?dur(-m)+" ago":"in "+dur(m))+"): "+e.det);
     }
-    if(!any) push("_nothing above tier 3 in the next two days_");
+    if(!any) push("_nothing of any size in the next two days_");
     push("");
   }
 
@@ -1773,72 +1852,84 @@ function buildPrompt(){
     const sp=setups().map(x=>({...x,met:x.c.filter(k=>k.ok).length}));
     const armed=sp.filter(x=>x.met===x.c.length), near=sp.filter(x=>x.met>0&&x.met<x.c.length)
       .sort((a,b)=>(b.met/b.c.length)-(a.met/a.c.length)).slice(0,3);
-    push("## Playbook");
-    push("Armed (every condition met): "+(armed.length?armed.map(x=>x.n).join(", "):"none"));
+    push("## Situations I watch for");
+    push("Fully lined up right now (every condition met): "+(armed.length?armed.map(x=>x.n).join(", "):"none"));
     for(const x of near)
-      push("- "+x.n+" \u2014 "+x.met+"/"+x.c.length+", missing: "+x.c.filter(k=>!k.ok).map(k=>k.txt).join("; "));
+      push("- "+x.n+" \u2014 "+x.met+" of "+x.c.length+" conditions met, still waiting on: "+
+           x.c.filter(k=>!k.ok).map(k=>k.txt).join("; "));
     push("");
   }
 
-  push("## My parameters",
-       "- Macro regime: "+(c.regime==="inverse"
-          ? "inflation \u2014 good economic news is bad for the index (the rates channel is inverted)"
-          : "growth \u2014 good economic news is good for the index"),
-       "- Instrument: "+c.instrument+" ($"+(c.instrument==="MNQ"?2:20)+" per point)",
-       "- Risk per trade: $"+fmt(c.riskPerTrade,0)+" \u00b7 stop "+c.stopPts+" pts \u00b7 suggested size "+
-         (s.size||0)+" contract"+(s.size===1?"":"s"),
-       "- I engage above |score| "+c.minScore+" and confidence "+c.minConf+"%","");
+  push("## My own settings",
+       "- How I have told it to read the economy: "+(c.regime==="inverse"
+          ? "inflation is the worry, so strong economic news is BAD for share prices"
+          : "growth is what matters, so strong economic news is GOOD for share prices"),
+       "- Contract size: the "+(c.instrument==="MNQ"?"smaller 'micro'":"standard")+" one ("+c.instrument+
+         "), where one point of movement is $"+(c.instrument==="MNQ"?2:20),
+       "- Most I will risk on one trade: $"+fmt(c.riskPerTrade,0)+" \u00b7 I get out if it goes "+c.stopPts+
+         " points against me \u00b7 that works out at "+(s.size||0)+" "+contractName(c.instrument,s.size),
+       "- I only consider a trade when the score is stronger than "+c.minScore+" and the tool is at least "+
+         c.minConf+"% sure","");
 
   if(briefCfg.jrnl&&state.journal.length){
     const closed=state.journal.filter(r=>r.pts!=null&&r.pts!=="");
     const wins_=closed.filter(r=>+r.pts>0);
     const avg=rs=>rs.length?Math.round(rs.reduce((a,r)=>a+Math.abs(r.score||0),0)/rs.length):null;
-    push("## My journal",
-         "- "+state.journal.length+" entries, "+closed.length+" closed"+
-         (closed.length?", net "+sgn(closed.reduce((a,r)=>a+ +r.pts,0),0)+" pts, "+
-          Math.round(wins_.length/closed.length*100)+"% win rate":""));
+    push("## My own record",
+         "- "+state.journal.length+" trades noted, "+closed.length+" of them finished"+
+         (closed.length?", "+sgn(closed.reduce((a,r)=>a+ +r.pts,0),0)+" points in total, "+
+          Math.round(wins_.length/closed.length*100)+"% of them went my way":""));
     const w=avg(wins_), l=avg(closed.filter(r=>+r.pts<=0));
-    if(w!=null&&l!=null) push("- Mean |bias score| at entry: "+w+" on winners, "+l+" on losers");
+    if(w!=null&&l!=null) push("- Average dashboard score when I got in: "+w+" on the ones that worked, "+l+
+      " on the ones that did not");
     push("");
   }
 
   if(briefCfg.method){
-    push("## How the console builds its number",
-         "Six factors, each scored \u2212100..+100 and weighted: news tape 24%, catalyst posture 16%, rates "+
-         "and dollar 18%, risk appetite 18%, session structure 14%, mega-cap torque 10%. The weighted sum is "+
-         "the bias score. Confidence is 45% factor agreement, 35% session liquidity, 20% tape freshness. "+
-         "Headline sentiment comes from a keyword lexicon split into a rates channel and a risk channel, "+
-         "recency-weighted on a 45-minute half-life and scaled by source tier. Gates (closed market, the "+
-         "window around a tier-1 print, pre-release compression, lunch chop, low confidence) override "+
-         "direction entirely and force a stand-down. Feel free to tell me the weighting is wrong.","");
+    push("## How the dashboard works out its number",
+         "Six inputs, each scored from \u2212100 to +100 and then blended: what the news is saying counts for 24%, "+
+         "big announcements due 16%, interest rates and the dollar 18%, how brave the market feels 18%, where the "+
+         "price sits today 14%, and the giant companies 10%. Its confidence is three things: whether the six agree "+
+         "with each other (45%), how many people are trading at this hour (35%), and how fresh the news is (20%). "+
+         "Headlines are scored by a list of words and phrases, split between ones about the economy and ones about "+
+         "company performance, with newer stories counting for more and more trusted sources counting for more. "+
+         "A handful of conditions \u2014 a closed market, the minutes either side of a big announcement, the quiet "+
+         "before one, a directionless lunchtime, or the six inputs disagreeing \u2014 override the direction "+
+         "entirely and tell me to stay out. Do say if you think any of that is weighted wrongly.","");
   }
 
   const ask=briefCfg.ask==="custom"?briefCfg.custom.trim():ASKS[briefCfg.ask];
-  if(ask) push("## What I want from you",ask);
+  if(ask) push("## What I would like from you",ask);
   return P.join("\n");
 }
 
 R.brief=function(b){
   const text=buildPrompt();
   const opt=(k,lab,on)=>'<button class="btn'+(on?" on":"")+'" data-t="'+k+'">'+lab+'</button>';
-  let h='<div class="filters">'+
-    [["read","Read the tape"],["next","Next catalyst"],["levels","Level map"],
-     ["against","Argue the other side"],["risk","Critique my risk"],["none","Brief only"],["custom","My question"]]
+  let h='<div class="note" style="margin-bottom:9px">There is no AI inside this page. What it does instead is write '+
+    'out everything it knows \u2014 the score and why, the prices, the news, what is coming up \u2014 as one message '+
+    'you can paste into Claude, or any other assistant, and get a proper answer back. Pick what you want to ask, '+
+    'choose what to include, then copy.</div>';
+  h+='<div class="lab" style="margin-bottom:4px">What do you want to ask?</div>';
+  h+='<div class="filters">'+
+    [["read","What should I make of this?"],["next","The next big event"],["levels","Which prices matter"],
+     ["against","Argue the other way"],["risk","Check my risk"],["none","Just the facts"],["custom","My own question"]]
      .map(x=>'<button class="btn'+(briefCfg.ask===x[0]?" on":"")+'" data-a="'+x[0]+'">'+x[1]+'</button>').join("")+
     '</div>';
   if(briefCfg.ask==="custom")
-    h+='<input type="text" id="bp-custom" placeholder="What do you want to ask about this tape?" value="'+
+    h+='<input type="text" id="bp-custom" placeholder="Ask anything you like about what is on screen" value="'+
        esc(briefCfg.custom)+'" style="margin-bottom:8px">';
+  h+='<div class="lab" style="margin-bottom:4px">What should it include?</div>';
   h+='<div class="filters">'+
-    opt("cal","Calendar",briefCfg.cal)+opt("play","Playbook",briefCfg.play)+
-    opt("jrnl","Journal",briefCfg.jrnl)+opt("method","Methodology",briefCfg.method)+
-    '<span class="stepper"><button class="btn" data-w="-">Wire \u2212</button>'+
+    opt("cal","What is scheduled",briefCfg.cal)+opt("play","Patterns",briefCfg.play)+
+    opt("jrnl","My past trades",briefCfg.jrnl)+opt("method","How the score works",briefCfg.method)+
+    '<span class="stepper"><button class="btn" data-w="-">Fewer</button>'+
     '<span class="chip">'+briefCfg.wire+' headlines</span>'+
-    '<button class="btn" data-w="+">Wire +</button></span></div>';
+    '<button class="btn" data-w="+">More</button></span></div>';
   h+='<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">'+
-     '<button class="btn pri" id="bp-copy">Copy prompt</button>'+
-     '<span class="note" id="bp-msg">'+text.length.toLocaleString()+' characters \u00b7 roughly '+
-     Math.round(text.length/4).toLocaleString()+' tokens</span></div>';
+     '<button class="btn pri" id="bp-copy">Copy it</button>'+
+     '<span class="note" id="bp-msg">'+text.length.toLocaleString()+' characters, about '+
+     Math.round(text.length/5.5).toLocaleString()+' words</span></div>';
   h+='<textarea id="bp-out" class="briefout" readonly spellcheck="false"></textarea>';
   b.innerHTML=h;
   $("#bp-out",b).value=text;
@@ -1854,7 +1945,7 @@ R.brief=function(b){
     let done=false;
     try{ await navigator.clipboard.writeText(ta.value); done=true; }catch(e){}
     if(!done){ try{ ta.focus(); ta.select(); done=document.execCommand("copy"); }catch(e){} }
-    msg.textContent=done?"Copied \u2014 paste it into Claude.":"Could not reach the clipboard. Select the text below and copy it.";
+    msg.textContent=done?"Copied \u2014 now paste it into Claude.":"Could not reach the clipboard. Select the text below and copy it by hand.";
     if(!done){ ta.focus(); ta.select(); }
     setTimeout(()=>{ if(wins.brief&&!wins.brief.min) renderApp("brief"); },2600);
   };
@@ -1866,59 +1957,90 @@ R.set=function(b){
   const row=(lab,ctl,note)=>'<div style="margin-bottom:11px"><div class="lab" style="margin-bottom:4px">'+lab+'</div>'+
     ctl+(note?'<div class="note" style="margin-top:3px">'+note+'</div>':'')+'</div>';
   let h='';
-  h+=row("Display",
-    '<select id="s-sess"><option value="night"'+(c.session==="night"?" selected":"")+'>Night session (dark)</option>'+
-    '<option value="day"'+(c.session==="day"?" selected":"")+'>Day session (light)</option></select>');
-  h+=row("Macro regime",
-    '<select id="s-reg"><option value="growth"'+(c.regime==="growth"?" selected":"")+'>Growth — good news is good news</option>'+
-    '<option value="inverse"'+(c.regime==="inverse"?" selected":"")+'>Inflation — good news is bad news</option></select>',
-    "Flips the sign of the rates channel. In an inflation-fighting regime a hot jobs number is bearish for NQ "+
-    "because it pushes the discount rate up; in a growth regime the same number is bullish. Getting this wrong "+
-    "inverts half the model.");
-  h+=row("Reference price (NQ)",
+  h+=row("Appearance",
+    '<select id="s-sess"><option value="night"'+(c.session==="night"?" selected":"")+'>Dark</option>'+
+    '<option value="day"'+(c.session==="day"?" selected":"")+'>Light</option></select>');
+  h+=row("What is the market worried about?",
+    '<select id="s-reg"><option value="growth"'+(c.regime==="growth"?" selected":"")+'>Growth — good economic news lifts share prices</option>'+
+    '<option value="inverse"'+(c.regime==="inverse"?" selected":"")+'>Inflation — good economic news pushes share prices down</option></select>',
+    "This is the most important setting here. When central banks are fighting inflation, a strong jobs report is "+
+    "actually bad news for shares, because it means interest rates stay high for longer and future company profits "+
+    "are worth less today. When growth is the worry, the same report is good news. Set this wrong and half of what "+
+    "the tool tells you will be back to front.");
+  h+=row("Starting price for the practice data",
     '<input type="number" id="s-ref" value="'+c.ref+'" step="1">',
-    "Anchors the simulated tape and the level ladder. Set it to roughly where the front month is trading so the "+
-    "structure factor means something.");
-  h+=row("Instrument",
-    '<select id="s-inst"><option value="NQ"'+(c.instrument==="NQ"?" selected":"")+'>NQ — $20 per point</option>'+
-    '<option value="MNQ"'+(c.instrument==="MNQ"?" selected":"")+'>MNQ — $2 per point</option></select>');
+    "Only used while the prices are made up. Put in roughly where the Nasdaq-100 is actually trading, so that the "+
+    "practice numbers look believable and the rest of the tool has something sensible to work with.");
+  h+=row("Which contract you trade",
+    '<select id="s-inst"><option value="NQ"'+(c.instrument==="NQ"?" selected":"")+'>Standard — one point is worth $20</option>'+
+    '<option value="MNQ"'+(c.instrument==="MNQ"?" selected":"")+'>Smaller (micro) — one point is worth $2</option></select>',
+    "The smaller contract behaves exactly the same way; it just moves a tenth as much money.");
   h+='<div class="g2" style="gap:9px">'+
-    row("Risk per trade ($)",'<input type="number" id="s-risk" value="'+c.riskPerTrade+'" step="50">')+
-    row("Stop (points)",'<input type="number" id="s-stop" value="'+c.stopPts+'" step="1">')+
-    row("Min score to engage",'<input type="number" id="s-ms" value="'+c.minScore+'" step="1">')+
-    row("Min confidence %",'<input type="number" id="s-mc" value="'+c.minConf+'" step="1">')+'</div>';
-  h+='<button class="btn pri" id="s-save">Apply</button> <button class="btn" id="s-reset">Reset</button>';
-  h+='<hr class="sep"><div class="lab" style="margin-bottom:5px">Where your data lives</div>'+
+    row("Most you would risk on one trade ($)",'<input type="number" id="s-risk" value="'+c.riskPerTrade+'" step="50">')+
+    row("Get out if it moves this far against you (points)",'<input type="number" id="s-stop" value="'+c.stopPts+'" step="1">')+
+    row("Score you need before considering a trade",'<input type="number" id="s-ms" value="'+c.minScore+'" step="1">')+
+    row("How sure the tool has to be (%)",'<input type="number" id="s-mc" value="'+c.minConf+'" step="1">')+'</div>';
+  h+='<div class="note" style="margin:-4px 0 10px">The first two work out how many contracts the tool suggests: your '+
+    'money limit divided by how much one contract would cost you if the trade went wrong. The last two are how picky '+
+    'you want it to be \u2014 raise them and it will suggest a trade far less often.</div>';
+  h+='<button class="btn pri" id="s-save">Save changes</button> <button class="btn" id="s-reset">Back to the defaults</button>';
+  h+='<hr class="sep"><div class="lab" style="margin-bottom:5px">Where your journal is kept</div>'+
     '<div class="note">'+(state.storeMode==="shared"
-      ?"Journal and settings are in this artifact’s shared store — they survive reloads and republishes, and "+
-       "anyone who can open this OS sees the same log."
+      ?"Your journal and settings are saved with this page. They survive a reload, and anyone who can open this page "+
+       "sees the same journal."
       :state.storeMode==="local"
-      ?"Journal and settings are in this browser only. They survive reloads but do not follow you to another device."
-      :"Nothing is being persisted in this view — storage is unavailable here.")+'</div>';
-  h+='<hr class="sep"><div class="lab" style="margin-bottom:5px">Feed</div>'+
+      ?"Your journal and settings are saved in this browser only. They survive a reload, but they will not follow "+
+       "you to another computer or phone."
+      :"Nothing is being saved here — this browser will not let the page store anything, so your journal disappears "+
+       "when you close the tab.")+'</div>';
+  h+='<hr class="sep"><div class="lab" style="margin-bottom:5px">Real prices and real news</div>'+
     (selfHosted
-      ?'<div class="note" style="margin-bottom:8px">This copy is serving its own '+
-       '<span class="mono">feed.json</span>, refreshed by a scheduled job and re-read every 90 seconds. '+
-       'Last pull: <b>'+esc(market.stamp||"\u2014")+'</b>. Nothing to paste.</div>'
+      ?'<div class="note" style="margin-bottom:8px">This copy fetches its own news and prices automatically and '+
+       'checks for new ones every 90 seconds. Last updated: <b>'+esc(market.stamp||"\u2014")+'</b>. '+
+       'There is nothing for you to paste.</div>'
       :'')+
-    '<div class="note" style="margin-bottom:6px">Run <span class="mono">npm run feed</span> in the repo and paste '+
-    '<span class="mono">data/feed.json</span> here. It swaps the simulated tape for real quotes, real session '+
-    'levels and a real wire \u2014 free RSS and free quote endpoints, no API key. A sandboxed page cannot fetch '+
-    'them itself, so this paste is the bridge.</div>'+
-    '<textarea id="s-feed" placeholder="Paste data/feed.json"></textarea>'+
+    '<div class="note" style="margin-bottom:6px">For safety, a page like this one is not allowed to go and fetch '+
+    'news by itself, so you fetch it and hand it over. Run <span class="mono">npm run feed</span> in the project '+
+    'folder, open the file it writes (<span class="mono">data/feed.json</span>), and paste the contents in here. '+
+    'That swaps the made-up prices for real ones and the example headlines for real news. It is all free and needs '+
+    'no account anywhere.</div>'+
+    '<textarea id="s-feed" placeholder="Paste the contents of data/feed.json here"></textarea>'+
     '<div style="display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap">'+
-    '<button class="btn pri" id="s-feedgo">Load snapshot</button>'+
-    '<button class="btn" id="s-feedoff">Back to demo</button>'+
+    '<button class="btn pri" id="s-feedgo">Use this data</button>'+
+    '<button class="btn" id="s-feedoff">Back to practice mode</button>'+
     '<span class="note" id="s-feedmsg"></span></div>';
-  h+='<hr class="sep"><div class="lab" style="margin-bottom:5px">How the bias score is built</div>'+
-    '<div class="note">Six factors, each scored −100 to +100 and weighted: news tape 24%, catalyst posture 16%, '+
-    'rates and dollar 18%, risk appetite 18%, session structure 14%, mega-cap torque 10%. The weighted sum is the '+
-    'bias score. Confidence is 45% factor agreement, 35% session liquidity, 20% how fresh the tape is. Gates '+
-    '(a closed market, a no-trade window around a print, lunch chop, low confidence) override direction entirely '+
-    'and force a stand-down — the model is allowed to say "no trade", which is the answer most of the day.</div>';
-  h+='<hr class="sep"><div class="note">Decision support, not advice. Nothing here is a recommendation to buy or '+
-    'sell anything. Futures are leveraged and you can lose more than you deposit. The tape is simulated unless you '+
-    'load a snapshot; the calendar is generated from publication rules and should be checked against the source.</div>';
+  h+='<hr class="sep"><div class="lab" style="margin-bottom:5px">How the score is worked out</div>'+
+    '<div class="note">Six things are each scored from −100 to +100 and then blended, some counting for more than '+
+    'others: what the news is saying (24%), big announcements due (16%), interest rates and the dollar (18%), how '+
+    'brave the market feels (18%), where the price sits today (14%), and the giant companies (10%). The percentage '+
+    'beside the score is how sure the tool is, and that comes from three things: whether those six agree with each '+
+    'other, how many people are trading at this hour, and how fresh the news is. A few conditions overrule the score '+
+    'completely and simply say stay out — a shut market, the minutes either side of a big announcement, a '+
+    'directionless lunchtime, or the six inputs contradicting each other. "No trade" is an answer the tool is '+
+    'allowed to give, and most of the day it is the right one.</div>';
+  h+='<hr class="sep"><div class="lab" style="margin-bottom:5px">Words you will meet</div>'+
+    '<div class="note">'+
+    '<b>Futures</b> — an agreement to buy or sell something at a set price on a future date. Traders use them to bet '+
+    'on where a price is heading without owning anything.<br>'+
+    '<b>Nasdaq-100</b> — the hundred biggest companies listed on the Nasdaq exchange, mostly technology. This whole '+
+    'tool is about that one index.<br>'+
+    '<b>Point</b> — one unit of movement in the index. On a standard contract that is $20 of your money; on the '+
+    'smaller one, $2.<br>'+
+    '<b>Going long / going short</b> — betting the price rises (long) or falls (short). You can do either with futures.<br>'+
+    '<b>Getting stopped out</b> — the order that closes your trade automatically once it has lost a set amount, so '+
+    'one bad trade cannot run away with your account.<br>'+
+    '<b>The Fed</b> — the United States central bank, which sets interest rates. When it speaks, share prices move.<br>'+
+    '<b>Today\'s average price</b> — the average price weighted by how much was traded at each level. Traders treat '+
+    'it as the day\'s fair value and watch whether the price is above or below it. You may see it called VWAP.<br>'+
+    '<b>The fear gauge</b> — an index of how much turbulence traders expect over the coming month. Known as the VIX; '+
+    'it rises when people are nervous.<br>'+
+    '<b>Earnings</b> — a company\'s quarterly results. For the giants in this index, one set of results can move the '+
+    'whole thing.</div>';
+  h+='<hr class="sep"><div class="note">This is a tool for thinking, not financial advice, and nothing in it is a '+
+    'recommendation to buy or sell anything. Futures are borrowed money by design: losses are magnified in exactly '+
+    'the same way as gains, and you can lose more than you put in. The prices here are made up unless you have '+
+    'loaded real ones, and the dates in the diary are worked out from the usual publishing pattern, so check them '+
+    'against the official source before you rely on them.</div>';
   b.innerHTML=h;
   $("#s-save",b).onclick=async()=>{
     c.session=$("#s-sess",b).value; c.regime=$("#s-reg",b).value;
@@ -1934,17 +2056,17 @@ R.set=function(b){
     await saveCfg(); state.signal=computeSignal(); renderAll(); };
   const msg=t=>{const n=$("#s-feedmsg",b); if(n)n.textContent=t;};
   $("#s-feedgo",b).onclick=async()=>{
-    const raw=$("#s-feed",b).value.trim(); if(!raw) return msg("Nothing pasted.");
-    let snap; try{ snap=JSON.parse(raw); }catch(e){ return msg("That is not valid JSON."); }
-    if(!loadSnapshot(snap)) return msg("No quotes or headlines in that file.");
+    const raw=$("#s-feed",b).value.trim(); if(!raw) return msg("There is nothing in the box.");
+    let snap; try{ snap=JSON.parse(raw); }catch(e){ return msg("That does not look like the file — copy the whole of it, including the brackets at each end."); }
+    if(!loadSnapshot(snap)) return msg("That file has no prices or headlines in it.");
     snap.ts=snap.ts||Date.now(); await store.put("feed",snap);
-    msg((snap.headlines?snap.headlines.length:0)+" headlines loaded.");
+    msg("Loaded "+(snap.headlines?snap.headlines.length:0)+" headlines and real prices.");
   };
   $("#s-feedoff",b).onclick=async()=>{
     market.live=false; market.stamp=null; seedMarket(c.ref);
     state.wire=[]; ingest(DEMO_WIRE,true);
     await store.put("feed",{ts:0}); state.signal=computeSignal(); paintChrome(); renderAll(); paintDock();
-    msg("Back on the simulated tape.");
+    msg("Back to made-up prices and example headlines.");
   };
 };
 function applyTheme(){ document.documentElement.setAttribute("data-session",state.cfg.session==="day"?"day":"night"); }
@@ -1955,21 +2077,24 @@ function applyTheme(){ document.documentElement.setAttribute("data-session",stat
 const TICK_SYMS=["nq","es","vx","tnx","dxy"];
 function paintChrome(){
   const s=state.signal;
-  $("#clock").textContent=pad(s.t.h)+":"+pad(s.t.mi)+":"+pad(s.t.s)+" ET";
+  $("#clock").textContent=h12(s.t.min)+":"+pad(s.t.s)+" "+mer(s.t.min)+" NY";
   $("#sessionpill").textContent=s.sess.name;
   const lamp=$("#syslamp");
   lamp.className="dot"+(s.gates.length?(s.sess.id==="closed"||s.sess.id==="halt"?" bad":" warn"):"");
-  lamp.title=s.gates.length?s.gates[0].t:"No blocking condition";
+  lamp.title=s.gates.length?s.gates[0].t:"Nothing standing in the way";
   const fp=$("#feedpill");
-  fp.textContent=market.live?"LIVE":"DEMO";
-  fp.title=market.live?"Snapshot loaded "+(market.stamp||""):"Simulated tape and sample headlines — open Settings for detail";
+  fp.textContent=market.live?"LIVE":"PRACTICE";
+  fp.title=market.live?"Real prices and headlines, pulled "+(market.stamp||""):
+    "Made-up prices and example headlines, so you can try the tool out — see Settings for how to plug in real ones";
   let h="";
   for(const k of TICK_SYMS){
     const q=market.q[k], good=q.inv?-q.pct:q.pct;
-    h+='<span class="tk"><i>'+(k==="nq"?s.contract:q.n)+'</i><b>'+fmt(q.last,q.d)+'</b>'+
+    h+='<span class="tk" title="'+esc(q.lab+" ("+(k==="nq"?s.contract:q.n)+"). "+q.tip)+'">'+
+       '<i>'+esc(q.lab)+'</i><b>'+fmt(q.last,q.d)+'</b>'+
        '<span class="'+cls(good)+'">'+sgn(q.pct)+'%</span></span>';
   }
-  h+='<span class="tk"><i>BIAS</i><b class="'+cls(s.composite)+'">'+(s.composite>0?"+":"")+s.composite+
+  h+='<span class="tk" title="The overall reading, from −100 (down) to +100 (up), and how sure the tool is">'+
+     '<i>SCORE</i><b class="'+cls(s.composite)+'">'+(s.composite>0?"+":"")+s.composite+
      '</b><span style="color:var(--ink-3)">'+s.conf+'%</span></span>';
   $("#ticker").innerHTML=h;
   paintTitle();
@@ -2110,12 +2235,12 @@ addEventListener("orientationchange",()=>{ clearTimeout(vpTimer); vpTimer=setTim
    BOOT
    ===================================================================== */
 const BOOTLOG=[
-  "kernel ....................... ok",
-  "clock  america/new_york ...... ok",
-  "calendar rules  cpi|nfp|pce|fomc",
-  "sentiment lexicon  148 patterns",
-  "factor model  6 weighted inputs",
-  "tape  simulated — no feed attached"
+  "starting up .................. ok",
+  "clock, set to new york ....... ok",
+  "diary of scheduled reports ... ok",
+  "news word list, 148 phrases .. ok",
+  "scoring model, 6 inputs ...... ok",
+  "prices  practice data — no live feed attached yet"
 ];
 async function boot(){
   const log=$("#bootlog"); const reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
