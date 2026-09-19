@@ -324,6 +324,82 @@ Parsing proves nothing; the defects here only ever appear when something real
 runs. What was new this time is that the instrumentation found its own bugs
 within an hour of going live, which is the argument for having built it.
 
+### Acting on what the record said
+
+The first pulls were not a test run; they were an argument. Measured over 116
+live headlines, the scorer gave a reading to **12%** of the wire and **57%** of
+it reached no market at all. Three specific failures, each visible in the data
+rather than inferred:
+
+**The lexicon was asymmetric, so every reading leaned bullish.** The bullish
+side held ordinary words — `jumps`, `rally`, `surge` at +45 — while the bearish
+side held only extremes: `plunge`, `slump`, `tumble`, `craters`. "Dow drops 300
+points on rate fears" scored **zero**. Direction words are now one symmetric
+list.
+
+**Direction words did not know what had moved.** *"Stocks Decline, 10-Year
+Treasury Yield Touches 5% Amid Oil Surge"* scored **+28**, because "Surge" — about
+oil — fired the bullish equity pattern. *"Stocks slide as yields jump"* came out
+at −5, the correct −46 macro reading almost cancelled by a +45 equity "rally"
+that was really a bond yield. Direction words are now attributed to the nearest
+subject, on either side: English puts it after an attributive participle
+("Falling Oil") and before a finite verb ("Stocks decline"), and clause
+punctuation stops the search, which is what keeps "Global shares fall, Treasury
+yields rise" as one bearish equity reading rather than two contradictory ones.
+
+**Reach was hand-listed and far too narrow.** The Nasdaq's topics are
+`nasdaq, tech, fed, inflation, megacap`, so an entire cluster of headlines —
+*"Stocks Decline as Treasury Yields Rise"*, *"US Equity Indexes Fall as Benchmark
+Treasury Yield Jumps Back Above 5%"* — reached **no market at all**. Reach is now
+derived from each instrument's `drivers` map, which already declares which
+series move it and in which direction. That needed no new opinion about which
+market cares about a bond yield; the model had already said so, and nothing was
+reading it.
+
+Measured on the same 116 headlines:
+
+| | before | after |
+|---|---|---|
+| headlines with a reading | 12% | **29%** |
+| headlines reaching no market | 57% | **35%** |
+| markets reached per headline | 1.2 | 6.5 |
+| readings whose sign changed | — | 20 |
+
+### Two mistakes made getting there, both caught by the corpus
+
+The first version of the direction list had no word boundaries, so `gain`
+matched inside **again**st and `fall` inside **fall**ing — the identical defect
+fixed for topics one commit earlier, reintroduced within the hour by the same
+hand. Short common words need anchoring; long distinctive ones do not, which is
+why the older lexicons never showed it.
+
+The second version tested for the subject only *behind* the verb, which read
+"in **surging** bond issuance" as an equity rally. Both were found by scoring the
+saved corpus before and after rather than by reasoning about the regex.
+
+One existing check also had to be corrected rather than satisfied: `"dow" does
+not match inside "down"` asserted on *"Stocks down as yields jump"*, which now
+reaches the Dow legitimately through its yield driver. The assertion had stopped
+isolating the thing it named, so it was rewritten around a sentence with no
+driver words in it. A test that passes for a new reason is not passing.
+
+### Rows now say which scorer read them
+
+Changing the lexicon makes new rows incomparable with old ones, and the obvious
+response — reset the record — means never accumulating enough of it to conclude
+anything. Every row now carries `sv`, the `SCORER_VERSION` that read it, and
+`report()` names the mix instead of averaging across it. This change is v2.
+
+### Where this stops
+
+The residual errors are syntactic, and no further pattern fixes them: *"Why Lucid
+Group Stock Gave Back Some Gains Today"* still reads +17, because "Gains" is
+there and "Gave Back" is what happened to them. *"Trump administration advances a
+fighter jet deal"* reads +28 on a sense of "advances" that has nothing to do with
+price. That is the honest case for replacing the lexicon with a model rather than
+extending it — and the point is that it is now a case made from measurements,
+with a device in place to judge whether the replacement is actually better.
+
 ### Traps found this round
 
 - **The Lambda package's file list lived in two places.** `core.mjs` gained an

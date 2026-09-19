@@ -31,7 +31,15 @@ const pct = v => (Number.isFinite(v) ? (v >= 0 ? "+" : "") + v.toFixed(3) + "%" 
 console.log("\n" + src);
 console.log(r.pulls + " pulls, " + when(r.from) + " to " + when(r.to) + " UTC");
 console.log(r.headlines + " headlines on record, " + r.scored + " with a non-zero reading (" +
-  (r.headlines ? Math.round((r.scored / r.headlines) * 100) : 0) + "%)\n");
+  (r.headlines ? Math.round((r.scored / r.headlines) * 100) : 0) + "%)");
+
+const vs = Object.keys(r.versions);
+if (vs.length > 1) {
+  console.log("\n  ! two scorers are mixed in here: " +
+    vs.map(v => r.versions[v] + " rows from v" + v).join(", "));
+  console.log("    they are different measurements, so the averages below blend them.");
+}
+console.log();
 
 console.log("  horizon   scored   hit rate     after bullish    after bearish      spread");
 console.log("  " + "-".repeat(76));

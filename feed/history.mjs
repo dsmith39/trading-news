@@ -57,10 +57,11 @@ export function appendPull(prev, snap, scored) {
   for (const r of scored || []) {
     if (known.has(r.k)) continue;
     known.add(r.k);
-    /* `seen` is the entry time; `ts` is kept only to show how stale the wire was. */
+    /* `seen` is the entry time; `ts` is kept only to show how stale the wire was.
+       `sv` is which scorer read it — see SCORER_VERSION. */
     h.hl.push({ k: r.k, seen: t, ts: r.ts, txt: r.txt, src: r.src,
                 score: r.score, impact: r.impact, channel: r.channel,
-                entity: r.entity || undefined, mk: r.mk });
+                entity: r.entity || undefined, sv: r.sv, mk: r.mk });
   }
 
   const now = t;
@@ -127,9 +128,16 @@ export function report(hist, horizons = HORIZONS) {
       spread: up.length && dn.length ? mean(up) - mean(dn) : null
     };
   }
+  /* Rows read by different scorers are different measurements. Averaging across
+     them would quietly report the mean of two things, so say what the mix is
+     and let the caller decide rather than hiding it behind one number. */
+  const versions = {};
+  for (const r of hist?.hl || []) versions[r.sv ?? 1] = (versions[r.sv ?? 1] || 0) + 1;
+
   return {
     headlines: (hist?.hl || []).length,
     scored: (hist?.hl || []).filter(r => r.score !== 0).length,
+    versions,
     pulls: (hist?.px || []).length,
     from: hist?.px?.length ? Math.min(...hist.px.map(r => r.t)) : null,
     to: hist?.px?.length ? Math.max(...hist.px.map(r => r.t)) : null,
