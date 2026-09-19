@@ -7,7 +7,8 @@
   "scripts": {
     "feed": "node feed/fetch-news.mjs",
     "feed:print": "node feed/fetch-news.mjs --print",
-    "serve": "npx --yes http-server os -p 8088 -c-1"
+    "serve": "npx --yes http-server os -p 8088 -c-1",
+    "score:report": "node feed/score-report.mjs"
   },
   "engines": { "node": ">=18" }
 }

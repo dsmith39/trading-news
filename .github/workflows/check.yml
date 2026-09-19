@@ -26,7 +26,9 @@ jobs:
       - name: Feed and lambda sources parse
         run: |
           set -euo pipefail
-          for f in feed/core.mjs feed/sources.mjs feed/fetch-news.mjs aws/lambda/feed/index.mjs; do
+          for f in feed/core.mjs feed/sources.mjs feed/instruments.mjs feed/score.mjs \
+                   feed/history.mjs feed/score-report.mjs feed/fetch-news.mjs \
+                   aws/lambda/feed/index.mjs tools/check-scorer.mjs; do
             node --check "$f"
             echo "ok   $f"
           done
@@ -44,6 +46,12 @@ jobs:
           '
           node --check /tmp/os.js
           echo "ok   os/index.html"
+
+      - name: The scorer has not drifted between the page and the feed
+        run: node tools/check-scorer.mjs
+
+      - name: Forward-return bookkeeping holds up
+        run: node tools/check-history.mjs
 
       - name: The feed function packages with everything it imports
         run: |

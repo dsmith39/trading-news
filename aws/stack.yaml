@@ -177,6 +177,13 @@ Resources:
               - Effect: Allow
                 Action: s3:PutObject
                 Resource: !Sub "${SiteBucket.Arn}/feed.json"
+              # history.json is read back and rewritten on every pull, so this
+              # one key needs GetObject as well. Still no wildcard: the feed
+              # function can touch exactly two objects in this bucket and
+              # nothing else, and it cannot delete either of them.
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject]
+                Resource: !Sub "${SiteBucket.Arn}/history.json"
               - Effect: Allow
                 Action: [logs:CreateLogStream, logs:PutLogEvents]
                 Resource: !Sub "${FeedLogGroup.Arn}:*"

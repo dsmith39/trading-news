@@ -15,6 +15,8 @@ cp "$ROOT/aws/lambda/feed/index.mjs" \
    "$ROOT/feed/core.mjs" \
    "$ROOT/feed/sources.mjs" \
    "$ROOT/feed/instruments.mjs" \
+   "$ROOT/feed/score.mjs" \
+   "$ROOT/feed/history.mjs" \
    "$DEST/"
 
 # npm walks UP for a package.json and this repo has one at its root, so without

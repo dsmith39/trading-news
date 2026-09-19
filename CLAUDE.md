@@ -53,26 +53,37 @@ Nothing else. A stack change needs credentials Actions does not have.
 os/index.html          the entire OS - one file, no build step, no dependencies
 feed/core.mjs          RSS parsing, quote pulls, session-level derivation
 feed/sources.mjs       source registry and endpoints
-feed/fetch-news.mjs    local CLI -> data/feed.json
+feed/instruments.mjs   the sixteen markets, and what drives each of them
+feed/score.mjs         the headline scorer - a second copy of the page's block
+feed/history.mjs       the scorer's track record: prices in, forward returns out
+feed/fetch-news.mjs    local CLI -> data/feed.json + data/history.json
+feed/score-report.mjs  local CLI -> what the scorer has been worth
 aws/stack.yaml         S3 + CloudFront + DNS + scheduled Lambda + CI role
 aws/deploy.sh          one-command infrastructure deploy
-aws/lambda/feed/       the scheduled fetcher (shares feed/core.mjs)
+aws/package-feed.sh    the Lambda zip's file list, in one place
+aws/lambda/feed/       the scheduled fetcher (shares everything in feed/)
+tools/                 the checks check.yml runs
 ```
 
 ## Checking your work
 
-There is no test suite. Before pushing:
+Before pushing:
 
 ```bash
 node -e 'const fs=require("fs");const m=fs.readFileSync("os/index.html","utf8").match(/<script>([\s\S]*)<\/script>/);fs.writeFileSync("/tmp/os.js",m[1])' && node --check /tmp/os.js
 node --check feed/core.mjs && node --check aws/lambda/feed/index.mjs
 bash -n aws/deploy.sh
+node tools/check-scorer.mjs    # the page's scorer and feed/score.mjs still match
+node tools/check-history.mjs   # the forward-return bookkeeping still holds
 npm run serve      # drop a data/feed.json beside os/ and it behaves as deployed
 ```
 
-`check.yml` runs exactly these. They prove things **parse** — they do not catch
-runtime or environment behaviour, which is where every real defect here has come
-from.
+`check.yml` runs exactly these. Most of them prove things **parse** — they do not
+catch runtime or environment behaviour, which is where every real defect here has
+come from. The two in `tools/` are the exceptions and the only behavioural checks
+in the repo: they guard the places where being wrong leaves no trace, a scorer
+that has drifted out of step with the page and a forward return measured from the
+wrong moment. Add to them rather than starting a framework.
 
 ## Invariants worth keeping
 
@@ -81,6 +92,12 @@ from.
   balance do not exist before the cash session) must leave it absent rather than
   fall back to a seeded value — the structure factor weights VWAP heavily, and a
   real price measured against an invented one is worse than no reading.
+- **A measurement may not flatter the thing it measures.** The forward-return
+  log records the entry at the moment the feed *saw* a headline, not the time
+  the publisher stamped on it, and leaves a horizon blank when no price sits
+  near it. Both rules cost readings. Both exist because breaking either makes
+  the scorer look better than it is, and a scoreboard that cheats is worse than
+  no scoreboard.
 - **The score is not AI.** Headline sentiment is a keyword lexicon split into a
   rates channel and a risk channel; the composite is a weighted sum. Only the
   Brief app involves a model, and it only assembles a prompt for you to paste.
@@ -108,6 +125,15 @@ Cost is effectively zero — it is inside the perpetual free tiers.
   which is a different action from `lambda:GetFunction`.
 - **ACM certificates for CloudFront must live in `us-east-1`**, whatever region
   the rest of the stack is in.
+- **Never update this stack blind — use a change set and read every line of it.**
+  Two things hide there. `FeedFunction` carries a placeholder `ZipFile` in the
+  template while the real package is pushed afterwards by `deploy.yml`, so an
+  update that re-applied `Code` would blank the feed; capture `CodeSha256`
+  before and compare it after. And a resource you did not intend to change
+  appearing in the list means the deployed template has drifted from this
+  repository's — which it had, because two IAM fixes were once applied straight
+  to the role and never through CloudFormation. The role read correct; the
+  stack's record of it did not.
 
 ## Not advice
 
