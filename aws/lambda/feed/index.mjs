@@ -23,16 +23,26 @@ const HIST_KEY = process.env.HISTORY_KEY || "history.json";
 /**
  * Read, append, write. Deliberately wrapped so that nothing here can fail the
  * run: feed.json is the product and is already written by the time this is
- * called, while this file is instrumentation. A missing object is the first
- * run, not an error.
+ * called, while this file is instrumentation.
+ *
+ * The read refuses to guess. S3 answers a request for a missing object with
+ * AccessDenied rather than NoSuchKey when the caller cannot list the bucket,
+ * and this role deliberately cannot — so "the object is not there" and "I am no
+ * longer allowed to read it" arrive as the same error. Treating that as the
+ * first run would quietly throw the record away on every pull, which is why
+ * deploy.sh creates the file and anything but NoSuchKey stops here instead.
  */
 async function recordHistory(snap) {
-  let prev = EMPTY;
+  let prev;
   try {
     const got = await s3.send(new GetObjectCommand({ Bucket: process.env.SITE_BUCKET, Key: HIST_KEY }));
     prev = JSON.parse(await got.Body.transformToString());
   } catch (e) {
-    if (e.name !== "NoSuchKey" && e.name !== "NoSuchBucket") throw e;
+    if (e.name !== "NoSuchKey") {
+      throw new Error("cannot read " + HIST_KEY + " (" + e.name + ": " + e.message +
+        ") — refusing to start a new history over the old one");
+    }
+    prev = EMPTY;
     console.log("no history yet — starting one");
   }
   const hist = appendPull(prev, snap, scoreAll(snap.headlines));

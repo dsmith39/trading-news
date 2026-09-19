@@ -60,6 +60,24 @@ function scoreHeadline(text,regime){
   return {score:Math.round(clamp(raw,-100,100)),impact,entity,
           channel:Math.abs(mac)>Math.abs(eq)?"macro":"equity",hits:hits.slice(0,4)};
 }
+
+/* Topic words match whole words, not substrings. "ai" inside "chairman" tagged
+   a large share of the wire as Nvidia and Microsoft news, and "dow" inside
+   "down" did the same to the Dow; both were invisible while topics only
+   filtered a list on screen, and both started corrupting the record the moment
+   the feed began writing scores down. The optional plural keeps "earnings" and
+   "deliveries" reading as before. */
+const TOPIC_RE=new Map();
+function topicHit(text,topics){
+  if(!topics||!topics.length) return false;
+  const s=String(text||"");
+  for(const t of topics){
+    let re=TOPIC_RE.get(t);
+    if(!re){re=new RegExp("\\b"+t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"s?\\b","i");TOPIC_RE.set(t,re);}
+    if(re.test(s)) return true;
+  }
+  return false;
+}
 /* ---8<--- end shared scorer ---8<--- */
 
 export { scoreHeadline, LEX_EQ, LEX_MACRO, MEGACAP, HIGH_IMPACT, MED_IMPACT };
@@ -72,10 +90,11 @@ export { scoreHeadline, LEX_EQ, LEX_MACRO, MEGACAP, HIGH_IMPACT, MED_IMPACT };
  * with no market attached cannot be measured against a price.
  */
 export function touches(h, I) {
-  const t = String(h.txt || "").toLowerCase();
-  if (I.topics && I.topics.some(x => t.includes(x))) return true;
+  if (topicHit(h.txt, I.topics)) return true;
   if (h.entity && I.kind === "stock") return h.entity.toLowerCase() === I.key;
-  if (h.entity && I.kind === "future") return true;
+  /* A megacap story reaches the indices that hold the megacaps - not crude,
+     gold or the Nikkei, which were swept in while this only filtered a list. */
+  if (h.entity && I.giants) return true;
   return false;
 }
 

@@ -130,6 +130,19 @@ aws s3 cp os/index.html "s3://$BUCKET/index.html" --region "$REGION" \
   --content-type "text/html; charset=utf-8" \
   --cache-control "public, max-age=60, must-revalidate" --only-show-errors
 
+# The feed role can read and write history.json but cannot list the bucket, and
+# S3 reports a missing object as AccessDenied rather than NoSuchKey to a caller
+# that cannot list. The function therefore refuses to read a failure as "no
+# history yet" — so the file has to exist before it first runs, and this is the
+# one place with credentials wide enough to create it.
+if ! aws s3api head-object --region "$REGION" --bucket "$BUCKET" --key history.json >/dev/null 2>&1; then
+  echo "==> starting the scorer's history"
+  printf '{"v":1,"px":[],"hl":[]}' | \
+    aws s3 cp - "s3://$BUCKET/history.json" --region "$REGION" \
+      --content-type "application/json" \
+      --cache-control "public, max-age=600, must-revalidate" --only-show-errors
+fi
+
 echo "==> first feed pull (takes ~20s)"
 aws lambda invoke --region "$REGION" --function-name "$FEEDFN" \
   --cli-read-timeout 120 "$TMP/out.json" --output text --query StatusCode >/dev/null

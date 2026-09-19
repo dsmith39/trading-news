@@ -24,24 +24,28 @@ export const INSTRUMENTS = [
   /* ---- US index futures ---------------------------------------------- */
   { key:"nq", name:"Nasdaq 100", short:"NQ", sym:"NQ=F", kind:"future", ccy:"USD",
     pt:20, tick:0.25, d:2, micro:{name:"MNQ", pt:2}, options:"QQQ",
+    giants:true,
     drivers:{ tnx:-1, dxy:-0.6, vx:-1 },
     topics:["nasdaq","tech","fed","inflation","megacap"],
     note:"Long-duration tech. Rates and the dollar press on the multiple." },
 
   { key:"es", name:"S&P 500", short:"ES", sym:"ES=F", kind:"future", ccy:"USD",
     pt:50, tick:0.25, d:2, micro:{name:"MES", pt:5}, options:"SPY",
+    giants:true,
     drivers:{ tnx:-0.7, dxy:-0.5, vx:-1 },
     topics:["s&p","fed","inflation","earnings"],
     note:"Broader and less rate-sensitive than the Nasdaq." },
 
   { key:"rty", name:"Russell 2000", short:"RTY", sym:"RTY=F", kind:"future", ccy:"USD",
     pt:50, tick:0.1, d:1, micro:{name:"M2K", pt:5}, options:"IWM",
+    giants:true,
     drivers:{ tnx:-1.2, dxy:-0.3, vx:-1 },
     topics:["small cap","credit","fed"],
     note:"Small caps carry floating-rate debt, so they feel yields hardest." },
 
   { key:"ym", name:"Dow 30", short:"YM", sym:"YM=F", kind:"future", ccy:"USD",
     pt:5, tick:1, d:0, micro:{name:"MYM", pt:0.5}, options:"DIA",
+    giants:true,
     drivers:{ tnx:-0.5, dxy:-0.7, vx:-0.9 },
     topics:["dow","industrials","tariff"],
     note:"Industrial and multinational. A strong dollar hurts overseas earnings." },

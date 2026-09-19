@@ -26,8 +26,15 @@ console.error("\nwrote " + path.relative(process.cwd(), OUT) +
    track record too. Instrumentation must never cost the feed: if this throws,
    say so and keep the snapshot that was already written. */
 try {
-  let prev = EMPTY;
-  try { prev = JSON.parse(await fs.readFile(HIST, "utf8")); } catch { /* first run */ }
+  let prev;
+  try {
+    prev = JSON.parse(await fs.readFile(HIST, "utf8"));
+  } catch (e) {
+    /* Only an absent file is the first run. A file that exists and will not
+       read is a reason to stop, not to start a new record over the old one. */
+    if (e.code !== "ENOENT") throw e;
+    prev = EMPTY;
+  }
   const hist = appendPull(prev, snap, scoreAll(snap.headlines));
   await fs.writeFile(HIST, JSON.stringify(hist));
   console.error("wrote " + path.relative(process.cwd(), HIST) +
