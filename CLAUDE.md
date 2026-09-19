@@ -125,6 +125,15 @@ Cost is effectively zero — it is inside the perpetual free tiers.
   which is a different action from `lambda:GetFunction`.
 - **ACM certificates for CloudFront must live in `us-east-1`**, whatever region
   the rest of the stack is in.
+- **Never update this stack blind — use a change set and read every line of it.**
+  Two things hide there. `FeedFunction` carries a placeholder `ZipFile` in the
+  template while the real package is pushed afterwards by `deploy.yml`, so an
+  update that re-applied `Code` would blank the feed; capture `CodeSha256`
+  before and compare it after. And a resource you did not intend to change
+  appearing in the list means the deployed template has drifted from this
+  repository's — which it had, because two IAM fixes were once applied straight
+  to the role and never through CloudFormation. The role read correct; the
+  stack's record of it did not.
 
 ## Not advice
 

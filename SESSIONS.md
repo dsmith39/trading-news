@@ -224,6 +224,50 @@ change, so it needs a deliberate deploy; the CI role cannot make it, by design.
 `aws/package-feed.sh` gained `score.mjs` and `history.mjs`. That list having one
 home is what made this a one-line change rather than the trap it was last round.
 
+### The stack change, and the drift it exposed
+
+`FeedRole` now carries `s3:GetObject` and `s3:PutObject` on `history.json`,
+deployed by change set `history-json-grant` — stack `UPDATE_COMPLETE`, live
+policy confirmed by reading it back.
+
+The change set was worth more than the change. Only `FeedRole` should have
+moved. It listed five resources:
+
+| Resource | Why |
+|---|---|
+| `FeedRole` | the intended change |
+| `GithubDeployRole` | **drift** — see below |
+| `FeedFunction` | its `Role` is `!GetAtt FeedRole.Arn`, and CloudFormation cannot prove an unchanging ARN in advance |
+| `FeedSchedulerRule`, `FeedSchedulerPermission` | same reason, one link further down the chain |
+
+**The deployed template was 896 bytes behind the repository's.** Two fixes from
+earlier this session — the dual OIDC subject patterns, and
+`lambda:GetFunctionConfiguration` — were live on the IAM role but had never
+reached CloudFormation. They had been applied straight to IAM. Reading the role
+showed both; reading the stack's record of the role showed neither.
+
+That is the same shape as the OIDC trap itself: a thing that reads correct from
+the angle you happen to look from. Nothing was broken by it — the repository
+template carries both fixes, so any `./aws/deploy.sh` would have been correct —
+but a stack rollback, or an update computed from the stack's own recorded
+template, would have quietly reverted both and produced exactly the OIDC failure
+that cost a CloudTrail investigation last time. This update reconciled it: the
+template and the live role now agree.
+
+The other thing a change set buys here is the answer to the one dangerous
+question about this stack: `FeedFunction` has a placeholder `ZipFile` in the
+template, and the real package is pushed afterwards by `deploy.yml`. A stack
+update that re-applied `Code` would blank the feed function until the next
+merge. The change set showed only `Properties.Role` under `FeedFunction`, and
+`CodeSha256` was captured before the execute and compared after — identical,
+`3,314,117` bytes, `LastModified` unchanged. Never update this stack without
+that check.
+
+Also verified after the update, because the change set marked the scheduler
+permission `Replacement: Conditional`: the rule is still `ENABLED` on
+`cron(0/10 * ? * MON-FRI *)`, still targets the function, and the function's
+resource policy still lets EventBridge invoke it.
+
 ### Traps found this round
 
 - **The Lambda package's file list lived in two places.** `core.mjs` gained an
@@ -256,9 +300,9 @@ home is what made this a one-line change rather than the trap it was last round.
 - Live on the custom domain, feed refreshing every 10 minutes on weekdays
 - `main` is default and deploys; PRs gated by `check.yml`
 - One CloudFormation stack in `us-east-1`, effectively $0/month
-- `history.json` collecting from the first pull after this deploy; the scorer's
-  spread means nothing until a few hundred scored headlines have resolved, which
-  is days, not hours
+- The stack grants the feed function `history.json`; collection starts with the
+  first pull after the new function code ships. The scorer's spread means
+  nothing until a few hundred scored headlines have resolved — days, not hours
 - The account's shared `Github-Actions` role also fixed for immutable-id claims
 - 19 commits, the last four through the pull request flow, all deploys verified
   against the live site rather than trusted from a green check
