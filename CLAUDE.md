@@ -125,6 +125,15 @@ Cost is effectively zero — it is inside the perpetual free tiers.
   which is a different action from `lambda:GetFunction`.
 - **ACM certificates for CloudFront must live in `us-east-1`**, whatever region
   the rest of the stack is in.
+- **S3 answers a missing object with `AccessDenied`, not `NoSuchKey`**, when the
+  caller cannot list the bucket — and the feed role deliberately cannot. So "not
+  there" and "not allowed" arrive identically. Never resolve that ambiguity in
+  favour of "not there": `deploy.sh` creates `history.json` and the function
+  refuses to start a new record over an unreadable one.
+- **Topic words match whole words, not substrings.** `"ai"` inside "chairman"
+  and `"dow"` inside "down" mis-attributed a large share of the wire before
+  `topicHit()` existed. Anything matching headline text belongs in the shared
+  scorer block, where the drift check can see it.
 - **Never update this stack blind — use a change set and read every line of it.**
   Two things hide there. `FeedFunction` carries a placeholder `ZipFile` in the
   template while the real package is pushed afterwards by `deploy.yml`, so an

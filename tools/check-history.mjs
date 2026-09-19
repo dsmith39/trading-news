@@ -88,6 +88,26 @@ ok("appendPull does not mutate its input", EMPTY.px.length === 0 && EMPTY.hl.len
   ok("and the hit rate is the bullish half", Math.abs(r.horizons[15].hit - 0.5) < 1e-9, r.horizons[15].hit);
 }
 
+/* --- topics match whole words, and megacaps reach only the indices ------- */
+{
+  const mk = txt => scoreAll([{ txt, src: "Reuters", ts: T0 }])[0].mk;
+  ok("\"ai\" does not match inside \"chairman\"",
+     !mk("Best Buy's Chairman Emeritus sells 300,000 shares").length, mk("Best Buy's Chairman Emeritus sells 300,000 shares"));
+  ok("\"dow\" does not match inside \"down\"",
+     !mk("Stocks down as yields jump").includes("ym"), mk("Stocks down as yields jump"));
+  ok("\"ev\" does not match inside \"however\" or \"level\"",
+     !mk("Revenue however fell at the level of development").includes("tsla"));
+  ok("a real topic word still matches", mk("Dow falls 300 points").includes("ym"));
+  ok("a plural still matches", mk("Tesla deliveries beat estimates").includes("tsla"));
+  ok("a two-word topic still matches", mk("Yen slides as the carry trade unwinds").includes("nkd"));
+
+  const nv = mk("Nvidia raises guidance, cites strong demand");
+  ok("a megacap story reaches the indices that hold it",
+     ["nq", "es", "rty", "ym"].every(k => nv.includes(k)), nv);
+  ok("and not crude, gold or the Nikkei",
+     !["cl", "gc", "nkd"].some(k => nv.includes(k)), nv);
+}
+
 /* --- unreadable history starts a fresh one rather than throwing ---------- */
 ok("a corrupt history is replaced, not propagated",
    appendPull({ nonsense: true }, pull(T0, 20000), []).px.length === 1);

@@ -268,6 +268,62 @@ permission `Replacement: Conditional`: the rule is still `ENABLED` on
 `cron(0/10 * ? * MON-FRI *)`, still targets the function, and the function's
 resource policy still lets EventBridge invoke it.
 
+### Three defects the scoreboard found in its first hour
+
+Merging #8 shipped the collector, and it started reporting on itself
+immediately. Every one of these was invisible until the feed began writing
+scores down, and two of them were older than #8 — they simply had no
+consequence while `touches()` only filtered a list on screen.
+
+**1. S3 answers a missing object with AccessDenied, not NoSuchKey.** The first
+live invocation logged:
+
+```
+history not updated — AccessDenied: ... is not authorized to perform:
+s3:ListBucket on resource "arn:aws:s3:::nq-trading-os-site-471112617315"
+```
+
+That is deliberate S3 behaviour: without `s3:ListBucket` on the bucket, a
+request for an object that is not there is refused rather than reported
+missing, so existence cannot be probed. This role deliberately cannot list the
+bucket, so the first-run branch — which keys off `NoSuchKey` — could never fire.
+
+The tempting fix, treating `AccessDenied` as "no history yet", is the dangerous
+one: the moment a permission regressed it would silently start a new record
+over the old one, every ten minutes, and the log line would read like a
+successful first run. So the function now fails closed — anything but
+`NoSuchKey` stops with "refusing to start a new history over the old one" — and
+`deploy.sh` creates the empty file, being the one place with credentials wide
+enough to do it. The live object was seeded the same way. Granting
+`s3:ListBucket` would also have worked and was rejected: it widens the role to
+read every key in the bucket to buy back an error code, and it leaves the
+destructive failure mode in place.
+
+**2. Topic words matched as substrings.** `touches()` used
+`text.includes(topic)`, so the topic `"ai"` matched inside **ch·ai·rman** and
+the first recorded pull tagged *"Best Buy's Chairman Emeritus Sells 300,000
+Shares"* as Nvidia and Microsoft news. `"dow"` matched inside "down";
+Tesla's `"ev"` matched "however", "level", "revenue", "seven", "development".
+A large share of the wire was being attributed to the wrong markets.
+
+Now matched on word boundaries with an optional plural, as `topicHit()` inside
+the shared scorer block — so the drift check covers it in both copies.
+
+**3. A megacap story reached every future, including crude and gold.** The rule
+was `entity && kind === "future"`, and `kind: "future"` is also crude, gold and
+the Nikkei. Nvidia earnings were being recorded as touching the gold tape. The
+four US index futures now carry `giants: true` in `feed/instruments.mjs` — the
+page's own registry already had that flag — and both copies of `touches()` use
+it.
+
+The first pull collected under the broken matcher was discarded rather than
+kept: a record whose attributions are known wrong is worse than a shorter one.
+
+The lesson is the one this project keeps relearning from a different angle.
+Parsing proves nothing; the defects here only ever appear when something real
+runs. What was new this time is that the instrumentation found its own bugs
+within an hour of going live, which is the argument for having built it.
+
 ### Traps found this round
 
 - **The Lambda package's file list lived in two places.** `core.mjs` gained an
