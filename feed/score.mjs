@@ -12,14 +12,14 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 /* ---8<--- shared scorer: keep byte-identical to feed/score.mjs ---8<--- */
 const LEX_EQ=[
-  [/record (high|quarter|revenue|backlog)/i,55],[/beats? (on|estimates|expectations)/i,55],
+  [/record (high|quarter|revenue|backlog|profit)|(hits?|set|sets) (a |an )?record\b(?! low)/i,55],[/beats? (on|estimates|expectations)/i,55],
   [/tops? (estimates|expectations|views)/i,52],[/raises? (guidance|outlook|forecast|target)/i,62],
-  [/upgrade[sd]?( to buy| to overweight)?/i,42],[/surge[sd]?|soar[sd]?|rallies|rally|jumps?/i,45],
+  [/upgrade[sd]?( to buy| to overweight)?/i,42],
   [/buyback|repurchase|dividend (hike|increase)/i,38],[/strong demand|demand (is )?(strong|robust)/i,44],
   [/approval|approved|cleared/i,26],[/partnership|landmark deal|wins? (contract|order)/i,34],
   [/ai (capex|spending) (up|rises|accelerat)/i,46],[/settles?( lawsuit)?|dismissed/i,24],
   [/(miss|missed) (on|estimates|expectations)/i,-55],[/cuts? (guidance|outlook|forecast)/i,-64],
-  [/downgrade[sd]?/i,-42],[/plunge[sd]?|slump[sd]?|tumble[sd]?|sinks?|craters?/i,-48],
+  [/downgrade[sd]?/i,-42],
   [/layoffs?|job cuts|restructuring charge/i,-30],[/probe|investigation|antitrust|subpoena/i,-38],
   [/recall|halt(s|ed)? (production|shipments)/i,-40],[/short seller|accounting (issue|irregular)/i,-52],
   [/export (ban|curb|restriction)|blacklist|entity list/i,-50],[/outage|breach|hack(ed)?|ransomware/i,-34],
@@ -27,6 +27,50 @@ const LEX_EQ=[
   [/tariff/i,-36],[/escalat(es|ion)|strikes?|invasion|conflict widens/i,-40],
   [/bankrupt|default|insolven/i,-60],[/capitulat|liquidation|margin call/i,-45]
 ];
+/* Direction words, kept apart from the lexicons above because their sign
+   belongs to whatever moved, not to the sentence. "yields jump" is not an
+   equity rally, and "Amid Oil Surge" is not one either - both were scoring +45
+   on the equity channel and dragging genuinely bearish headlines to nearly
+   zero. The list is deliberately symmetric: the bearish side used to hold only
+   the extremes (plunge, tumble, craters) while the bullish side held the
+   ordinary words too, so every reading leaned bullish and "Dow drops 300
+   points" read as neutral. Every pattern is anchored on word boundaries: these
+   words are short and common enough that "gain" matched inside "against" and
+   "fall" inside "falling" on the first run of this list. */
+const LEX_MOVE=[
+  [/\b(surge|surges|surging|soar|soars|soaring|rally|rallies|rallying|jump|jumps|jumping|climb|climbs|climbing|advance|advances)\b/i,45],
+  [/\b(gain|gains|gaining|rise|rises|rising|rebound|rebounds|higher)\b/i,28],
+  [/\b(plunge|plunges|plunging|slump|slumps|slumping|tumble|tumbles|tumbling|sink|sinks|crater|craters)\b/i,-48],
+  [/\b(fall|falls|falling|drop|drops|dropping|decline|declines|declining|slide|slides|sliding|slip|slips|shed|sheds|retreat|retreats|lower)\b/i,-45]
+];
+/* Whose movement is it? The nearest subject wins, and it can sit on either
+   side: English puts it after an attributive participle ("Falling Oil", "in
+   surging bond issuance") and before a finite verb ("Stocks decline"). Looking
+   only backwards read both of those as equity moves. Clause punctuation stops
+   the search, which is what keeps "Global shares fall, Treasury yields rise"
+   apart - one bearish equity reading, one suppressed. */
+const MACRO_W="yields?|treasur\\w+|rates?|bonds?|dollar|dxy|oil|crude|gold|vix|volatility|inflation|cpi|pce";
+const EQUITY_W="stocks?|shares?|equit\\w+|nasdaq|s&p|dow|indexe?s?|indices|futures";
+const nearBefore=w=>new RegExp("\\b("+w+")\\b[^,;.]{0,14}$","i");
+const MACRO_BEFORE=nearBefore(MACRO_W), EQ_BEFORE=nearBefore(EQUITY_W);
+const MACRO_AFTER=new RegExp("^[^,;.]{0,3}\\b("+MACRO_W+")\\b","i");
+function movedSomethingElse(before,after){
+  if(MACRO_AFTER.test(after)) return true;          /* "Falling Oil" */
+  const m=before.match(MACRO_BEFORE); if(!m) return false;
+  const e=before.match(EQ_BEFORE);
+  return !e||m.index>e.index;                       /* whichever sits closer */
+}
+function moveScore(s){
+  let total=0; const hits=[];
+  for(const [re,w] of LEX_MOVE){
+    const g=new RegExp(re.source,"gi"); let m;
+    while((m=g.exec(s))){
+      if(movedSomethingElse(s.slice(0,m.index),s.slice(m.index+m[0].length))) continue;
+      total+=w; hits.push([re.source.slice(0,28),w]); break;
+    }
+  }
+  return {total,hits};
+}
 const LEX_MACRO=[
   [/inflation (cool|ease|slow|fall|decelerat)/i,58],[/(cooler|softer|below) (than )?(expected|forecast|consensus)/i,52],
   [/rate cut|cuts? rates?|easing cycle|dovish/i,64],[/qt (ends|slows)|balance sheet (runoff ends)/i,44],
@@ -50,6 +94,7 @@ function scoreHeadline(text,regime){
   const s=String(text||""); let eq=0,mac=0,hits=[];
   for(const [re,w] of LEX_EQ)   if(re.test(s)){eq+=w; hits.push([re.source.slice(0,28),w]);}
   for(const [re,w] of LEX_MACRO)if(re.test(s)){mac+=w; hits.push([re.source.slice(0,28),w]);}
+  const mv=moveScore(s); eq+=mv.total; hits.push(...mv.hits);
   const negated=/\bnot\b|\bdenies\b|\bdespite\b|\bfails to\b/i.test(s);
   if(negated){eq*=-.55;mac*=-.55;}
   if(regime==="inverse") mac=-mac;                      /* good news is bad news */
@@ -78,6 +123,30 @@ function topicHit(text,topics){
   }
   return false;
 }
+
+/* What each tracked series sounds like in a headline. An instrument is reached
+   by news about the series that already drive it - `drivers` says which those
+   are and in which direction - so this needs no second opinion about which
+   market cares about a bond yield. Without it 64% of a live pull reached no
+   market at all, "Stocks Decline as Treasury Yields Rise" among them, because
+   the Nasdaq's topics are nasdaq/tech/fed/inflation/megacap and none of those
+   words appear in it. Phrases, not bare words, where the bare word is common
+   English: "the dollar" rather than "dollar", which matches a share price. */
+const DRIVER_WORDS={
+  tnx:["treasury","treasuries","yield","10-year","ten-year","bond market","fed","fomc",
+       "powell","rate cut","rate hike","interest rate","inflation","cpi","pce","payroll",
+       "jobs report"],
+  dxy:["the dollar","us dollar","dollar index","greenback","dxy"],
+  vx: ["vix","volatility","risk-off","sell-off","selloff"],
+  jpy:["yen","boj","bank of japan","carry trade"],
+  usdjpy:["yen","boj","bank of japan","carry trade"],
+  eur:["euro","ecb"]
+};
+function driverHit(text,drivers){
+  if(!drivers) return false;
+  for(const k in drivers) if(topicHit(text,DRIVER_WORDS[k])) return true;
+  return false;
+}
 /* ---8<--- end shared scorer ---8<--- */
 
 export { scoreHeadline, LEX_EQ, LEX_MACRO, MEGACAP, HIGH_IMPACT, MED_IMPACT };
@@ -91,6 +160,7 @@ export { scoreHeadline, LEX_EQ, LEX_MACRO, MEGACAP, HIGH_IMPACT, MED_IMPACT };
  */
 export function touches(h, I) {
   if (topicHit(h.txt, I.topics)) return true;
+  if (driverHit(h.txt, I.drivers)) return true;
   if (h.entity && I.kind === "stock") return h.entity.toLowerCase() === I.key;
   /* A megacap story reaches the indices that hold the megacaps - not crude,
      gold or the Nikkei, which were swept in while this only filtered a list. */
@@ -101,6 +171,19 @@ export function touches(h, I) {
 /** The same dedupe key headlines() uses, so a story is logged once, not once a pull. */
 export const keyOf = txt => String(txt || "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 60);
 
+/**
+ * Bumped whenever the scorer changes how it reads a headline. Rows carry it so
+ * a lexicon change does not silently blend two different measurements into one
+ * average — the alternative was resetting the record every time, which would
+ * mean never accumulating enough of it to conclude anything.
+ *
+ *   1  the original keyword lexicon
+ *   2  direction words split out and attributed to whatever actually moved,
+ *      the bearish side made symmetric, topics matched on word boundaries,
+ *      and reach derived from each instrument's drivers
+ */
+export const SCORER_VERSION = 2;
+
 /** Score a pull's headlines and tag each with the markets it reaches. */
 export function scoreAll(rows, regime) {
   return rows.map(h => {
@@ -109,6 +192,7 @@ export function scoreAll(rows, regime) {
     return {
       k: keyOf(h.txt), txt: h.txt, src: h.src, ts: h.ts,
       score: s.score, impact: s.impact, channel: s.channel, entity: s.entity,
+      sv: SCORER_VERSION,
       mk: INSTRUMENTS.filter(i => touches(tagged, i)).map(i => i.key)
     };
   });

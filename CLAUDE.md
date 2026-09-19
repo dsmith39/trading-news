@@ -132,8 +132,19 @@ Cost is effectively zero — it is inside the perpetual free tiers.
   refuses to start a new record over an unreadable one.
 - **Topic words match whole words, not substrings.** `"ai"` inside "chairman"
   and `"dow"` inside "down" mis-attributed a large share of the wire before
-  `topicHit()` existed. Anything matching headline text belongs in the shared
-  scorer block, where the drift check can see it.
+  `topicHit()` existed. `"gain"` inside "against" repeated it in the direction
+  lexicon an hour later. Short common words need `\b`; anything matching
+  headline text belongs in the shared scorer block, where the drift check can
+  see it.
+- **A direction word means nothing without its subject.** "yields jump" is not
+  an equity rally and "Amid Oil Surge" is not one either; both scored +45 on the
+  equity channel until `moveScore()` started attributing them to the nearest
+  subject on either side. Test any change to it against a saved corpus, not
+  against invented sentences — both bugs in it were found that way and neither
+  was visible in the regex.
+- **Changing the scorer invalidates the record.** Bump `SCORER_VERSION` when a
+  change alters how a headline reads. Rows carry it, and `report()` names the
+  mix rather than averaging two different measurements into one number.
 - **Never update this stack blind — use a change set and read every line of it.**
   Two things hide there. `FeedFunction` carries a placeholder `ZipFile` in the
   template while the real package is pushed afterwards by `deploy.yml`, so an

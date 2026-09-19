@@ -8,7 +8,7 @@
  * better than it is, which is the one direction an error here must never go.
  */
 import { appendPull, forwardReturns, report, EMPTY, HL_DAYS, PX_DAYS } from "../feed/history.mjs";
-import { scoreAll, keyOf } from "../feed/score.mjs";
+import { scoreAll, keyOf, scoreHeadline, SCORER_VERSION } from "../feed/score.mjs";
 
 let failed = 0;
 const ok = (name, cond, extra) => {
@@ -93,8 +93,12 @@ ok("appendPull does not mutate its input", EMPTY.px.length === 0 && EMPTY.hl.len
   const mk = txt => scoreAll([{ txt, src: "Reuters", ts: T0 }])[0].mk;
   ok("\"ai\" does not match inside \"chairman\"",
      !mk("Best Buy's Chairman Emeritus sells 300,000 shares").length, mk("Best Buy's Chairman Emeritus sells 300,000 shares"));
+  /* No driver words in this one, so it isolates the topic path — the earlier
+     version said "Stocks down as yields jump", which now reaches the Dow
+     legitimately through its yield driver and so proved nothing. */
   ok("\"dow\" does not match inside \"down\"",
-     !mk("Stocks down as yields jump").includes("ym"), mk("Stocks down as yields jump"));
+     !mk("Quarterly sales were down at the retailer").includes("ym"),
+     mk("Quarterly sales were down at the retailer"));
   ok("\"ev\" does not match inside \"however\" or \"level\"",
      !mk("Revenue however fell at the level of development").includes("tsla"));
   ok("a real topic word still matches", mk("Dow falls 300 points").includes("ym"));
@@ -106,6 +110,57 @@ ok("appendPull does not mutate its input", EMPTY.px.length === 0 && EMPTY.hl.len
      ["nq", "es", "rty", "ym"].every(k => nv.includes(k)), nv);
   ok("and not crude, gold or the Nikkei",
      !["cl", "gc", "nkd"].some(k => nv.includes(k)), nv);
+}
+
+/* --- direction words belong to whatever actually moved ------------------- */
+{
+  const sc = txt => scoreHeadline(txt).score;
+  ok("an equity fall reads bearish", sc("Dow drops 300 points on rate fears") < 0);
+  ok("a rising yield does not read as an equity rally",
+     sc("Stocks slide as yields jump") < -40, sc("Stocks slide as yields jump"));
+  ok("nor does a commodity that surges in the same sentence",
+     sc("Stocks Decline, 10-Year Treasury Yield Touches 5% Amid Oil Surge") < 0);
+  ok("a participle takes the subject that follows it",
+     sc("Stocks Waver as Falling Oil Offsets Treasury Yield Threat") >= 0,
+     sc("Stocks Waver as Falling Oil Offsets Treasury Yield Threat"));
+  ok("a comma keeps two clauses apart",
+     sc("Global shares fall, Treasury yields rise") < 0);
+  ok("an equity rally still reads bullish", sc("Nasdaq rallies as yields fall") > 0);
+
+  /* The bearish side used to hold only the extremes, so every reading leaned up. */
+  ok("ordinary up and down words weigh the same",
+     Math.abs(sc("Stocks rise") + sc("Stocks fall")) <= 20,
+     [sc("Stocks rise"), sc("Stocks fall")]);
+
+  /* These are short words; without boundaries they match inside longer ones. */
+  ok("\"gain\" does not match inside \"against\"", sc("Shares steady against the euro") === 0);
+  ok("\"fall\" does not match inside \"shortfall\" alone",
+     sc("Company reports a shortfall in orders") <= 0);
+}
+
+/* --- an instrument is reached by news about what drives it --------------- */
+{
+  const mk = txt => scoreAll([{ txt, src: "Reuters", ts: T0 }])[0].mk;
+  const y = mk("Stocks Decline as Treasury Yields Rise");
+  ok("a yield story reaches the markets that declare a yield driver",
+     ["nq", "es", "rty", "ym", "gc"].every(k => y.includes(k)), y);
+  ok("and not the ones that do not", !y.includes("cl") && !y.includes("sol"), y);
+  ok("a dollar story needs the phrase, not the bare word",
+     !mk("Shares sold for 300,000 dollars").includes("gc"),
+     mk("Shares sold for 300,000 dollars"));
+  ok("a yen story reaches the Nikkei", mk("BOJ holds as the yen weakens").includes("nkd"));
+}
+
+/* --- rows say which scorer read them ------------------------------------- */
+{
+  const [r] = scoreAll([{ txt: "Dow drops 300 points", src: "Reuters", ts: T0 }]);
+  ok("a scored row carries the scorer version", r.sv === SCORER_VERSION, r.sv);
+  const h = appendPull(EMPTY, pull(T0, 20000), scoreAll(wire("Dow drops 300 points", T0)));
+  ok("and the history keeps it", h.hl[0].sv === SCORER_VERSION, h.hl[0].sv);
+  const mixed = { v: 1, px: h.px, hl: [{ ...h.hl[0] }, { ...h.hl[0], k: "x", sv: 1 }] };
+  ok("the report names the mix rather than averaging over it",
+     report(mixed, [15]).versions[1] === 1 && report(mixed, [15]).versions[2] === 1,
+     report(mixed, [15]).versions);
 }
 
 /* --- unreadable history starts a fresh one rather than throwing ---------- */
